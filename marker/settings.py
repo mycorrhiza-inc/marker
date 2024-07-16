@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     TORCH_DEVICE: Optional[str] = None # Note: MPS device does not work for text detection, and will default to CPU
     IMAGE_DPI: int = 96 # DPI to render images pulled from pdf at
     EXTRACT_IMAGES: bool = True # Extract images from pdfs and save them
+    PAGINATE_OUTPUT: bool = False # Paginate output markdown
 
     @computed_field
     @property
@@ -66,7 +67,7 @@ class Settings(BaseSettings):
     # Layout model
     SURYA_LAYOUT_DPI: int = 96
     BAD_SPAN_TYPES: List[str] = ["Caption", "Footnote", "Page-footer", "Page-header", "Picture"]
-    LAYOUT_MODEL_CHECKPOINT: str = "vikp/surya_layout2"
+    LAYOUT_MODEL_CHECKPOINT: str = "vikp/surya_layout3"
     BBOX_INTERSECTION_THRESH: float = 0.7 # How much the layout and pdf bboxes need to overlap to be the same
     LAYOUT_BATCH_SIZE: Optional[int] = None # Defaults to 12 for cuda, 6 otherwise
 
@@ -81,10 +82,6 @@ class Settings(BaseSettings):
     EDITOR_MODEL_NAME: str = "vikp/pdf_postprocessor_t5"
     ENABLE_EDITOR_MODEL: bool = False # The editor model can create false positives
     EDITOR_CUTOFF_THRESH: float = 0.9 # Ignore predictions below this probability
-
-    # Ray
-    RAY_CACHE_PATH: Optional[str] = None # Where to save ray cache
-    RAY_CORES_PER_WORKER: int = 1 # How many cpu cores to allocate per worker
 
     # Debug
     DEBUG: bool = False # Enable debug logging

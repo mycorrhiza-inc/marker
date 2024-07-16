@@ -46,7 +46,11 @@ The weights for the models are licensed `cc-by-nc-sa-4.0`, but I will waive that
 
 # Hosted API
 
-There is a hosted API for marker available [here](https://www.datalab.to/).  It's currently in beta, and I'm working on optimizing speed.
+There's a hosted API for marker available [here](https://www.datalab.to/):
+
+- Supports PDFs, word documents, and powerpoints 
+- 1/4th the price of leading cloud-based competitors
+- Leverages [Modal](https://modal.com/) for high reliability without latency spikes
 
 # Community
 
@@ -146,6 +150,15 @@ There are some settings that you may find useful if things aren't working the wa
 - If you're getting out of memory errors, decrease worker count (increased the `VRAM_PER_TASK` setting).  You can also try splitting up long PDFs into multiple files.
 
 In general, if output is not what you expect, trying to OCR the PDF is a good first step.  Not all PDFs have good text/bboxes embedded in them.
+
+## Useful settings
+
+These settings can improve/change output quality:
+
+- `OCR_ALL_PAGES` will force OCR across the document.  Many PDFs have bad text embedded due to older OCR engines being used.
+- `PAGINATE_OUTPUT` will put a horizontal rule between pages.  Default: False.
+- `EXTRACT_IMAGES` will extract images and save separately.  Default: True.
+- `BAD_SPAN_TYPES` specifies layout blocks to remove from the markdown output.
 
 # Benchmarks
 
