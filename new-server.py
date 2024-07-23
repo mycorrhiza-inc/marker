@@ -171,37 +171,22 @@ def process_pdfs_core_server(
 
 import base64
 import secrets
+import os
+import signal
+import shutil
+import sys
+import traceback
 
 from pathlib import Path
-
 from pydantic import BaseModel
-
 from typing import Optional, Annotated
-import signal  # Add this import to handle signal
-from litestar import (
-    MediaType,
-    Request,
-    Litestar,
-    Controller,
-    Response,
-    post,
-    get,
-)  # Importing Litestar
-import traceback
-import uvicorn
-
-import os
-import shutil
-import requests
-import sys
-
-from litestar.status_codes import HTTP_500_INTERNAL_SERVER_ERROR
+from litestar import MediaType, Request, Litestar, Controller, Response, post, get
 from litestar.datastructures import UploadFile
 from litestar.enums import RequestEncodingType
 from litestar.params import Body
-
-
-# from marker.server_utils import init_models_and_workers, process_single_pdf
+from litestar.status_codes import HTTP_500_INTERNAL_SERVER_ERROR
+import requests
+import uvicorn
 
 
 def rand_string() -> str:
@@ -234,100 +219,134 @@ TMP_DIR = Path("/tmp")
 MARKER_TMP_DIR = TMP_DIR / Path("marker")
 
 
+class RequestStatus(BaseModel):
+    status: str
+    success: bool
+    request_id: int
+    request_check_url: str
+    markdown: Optional[str] = None
+    meta: Optional[dict] = None
+    error: Optional[str] = None
+    page_count: Optional[int] = None
+
+
+# In-memory store (simple example, use a persistent store in practice)
+request_status = {}
+
+
 class PDFProcessor(Controller):
+    async def process_pdf_from_given_docdir(
+        self, request_id: int, doc_dir: Path
+    ) -> None:
+        try:
+            input_directory = doc_dir / Path("in")
+            output_directory = doc_dir / Path("out")
+            os.makedirs(input_directory, exist_ok=True)
+            os.makedirs(output_directory, exist_ok=True)
 
-    async def process_pdf_from_given_docdir(self, doc_dir: Path) -> str:
-        print(f"Called function on {doc_dir}")
-        input_directory = doc_dir / Path("in")
-        output_directory = doc_dir / Path("out")
+            def get_pdf_files(pdf_path: Path) -> list[Path]:
+                if not pdf_path.is_dir():
+                    raise ValueError("Path is not a directory")
+                return [
+                    f for f in pdf_path.iterdir() if f.is_file() and f.suffix == ".pdf"
+                ]
 
-        # Ensure the directories exist
-        os.makedirs(input_directory, exist_ok=True)
+            pdf_list = get_pdf_files(input_directory)
+            if len(pdf_list) == 0:
+                request_status[request_id].update(
+                    status="error", success=False, error="No PDF files found"
+                )
+                return
 
-        os.makedirs(output_directory, exist_ok=True)
+            first_pdf_filepath = pdf_list[0]
+            process_single_pdf(first_pdf_filepath, output_directory)
 
-        def get_pdf_files(pdf_path: Path) -> list[Path]:
-            if not pdf_path.is_dir():
-                raise ValueError("Path is not a directory")
-            return [f for f in pdf_path.iterdir() if f.is_file() and f.suffix == ".pdf"]
+            def pdf_to_md_path(pdf_path: Path) -> Path:
+                return (pdf_path.parent).parent / Path(
+                    f"out/{pdf_path.stem}/{pdf_path.stem}.md"
+                )
 
-        print("trying to locate pdf file")
-        pdf_list = get_pdf_files(input_directory)
-        if len(pdf_list) == 0:
-            print(f"No PDF's found in input directory : {input_directory}")
-            print(f"{input_directory.iterdir()}")
-            return ""
-        first_pdf_filepath = pdf_list[0]
-        print(f"found pdf at: {first_pdf_filepath}")
-        process_single_pdf(first_pdf_filepath, output_directory)
+            output_filename = pdf_to_md_path(first_pdf_filepath)
+            if not os.path.exists(output_filename):
+                request_status[request_id].update(
+                    status="error",
+                    success=False,
+                    error=f"Output markdown file not found at : {output_filename}",
+                )
+                return
 
-        print("Successfully processed pdf.")
+            with open(output_filename, "r") as f:
+                markdown_content = f.read()
 
-        # Read the output markdown file
-        # TODO : Fix at some point with tests
-        def pdf_to_md_path(pdf_path: Path) -> Path:
-            return (pdf_path.parent).parent / Path(
-                f"out/{pdf_path.stem}/{pdf_path.stem}.md"
+            request_status[request_id].update(
+                status="complete", success=True, markdown=markdown_content, page_count=1
+            )  # Simplified for example
+        except Exception as e:
+            request_status[request_id].update(
+                status="error", success=False, error=str(e)
             )
+        finally:
+            shutil.rmtree(doc_dir)
 
-        output_filename = pdf_to_md_path(first_pdf_filepath)
-        if not os.path.exists(output_filename):
-            return f"Output markdown file not found at : {output_filename}"
-        with open(output_filename, "r") as f:
-            markdown_content = f.read()
-        # Cleanup directories
-        shutil.rmtree(doc_dir)
-        # Return the markdown content as a response
-        return markdown_content
-
-    @post("/process_pdf_upload", media_type=MediaType.TEXT)
+    @post("/api/v1/marker", media_type=MediaType.JSON)
     async def process_pdf_upload(
         self,
-        data: Annotated[UploadFile, Body(media_type=RequestEncodingType.MULTI_PART)],
-    ) -> str:
-        doc_dir = MARKER_TMP_DIR / Path(rand_string())
-        # Parse the uploaded file
-        pdf_binary = data.file
-        input_directory = doc_dir / Path("in")
-        # Ensure the directories exist
-        os.makedirs(input_directory, exist_ok=True)
-        # Save the PDF to the output directory
-        pdf_filename = input_directory / Path(rand_string() + ".pdf")
+        file: Annotated[UploadFile, Body(media_type=RequestEncodingType.MULTI_PART)],
+        langs: Annotated[str, Body()],
+        force_ocr: Annotated[bool, Body()] = False,
+        paginate: Annotated[bool, Body()] = False,
+    ) -> dict:
+        request_id = rand_string()
+        doc_dir = MARKER_TMP_DIR / Path(request_id)
+        os.makedirs(doc_dir / Path("in"), exist_ok=True)
+        pdf_filename = doc_dir / Path("in") / Path(rand_string() + ".pdf")
+
         with open(pdf_filename, "wb") as f:
-            f.write(pdf_binary.read())
-        return await self.process_pdf_from_given_docdir(doc_dir)
+            f.write(file.read())
+
+        request_status[int(request_id)] = {
+            "status": "processing",
+            "success": True,
+            "request_id": int(request_id),
+            "request_check_url": f"/api/v1/marker/{request_id}",
+        }
+
+        # Process the file in the background
+        # This is a simplified demonstration; ideally, use background task queue like Celery
+        import asyncio
+
+        asyncio.create_task(
+            self.process_pdf_from_given_docdir(int(request_id), doc_dir)
+        )
+
+        return {
+            "success": True,
+            "error": None,
+            "request_id": int(request_id),
+            "request_check_url": f"/api/v1/marker/{request_id}",
+        }
+
+    @get("/api/v1/marker/{request_id}", media_type=MediaType.JSON)
+    async def get_request_status(self, request_id: int) -> dict:
+        return request_status.get(request_id, {"status": "not_found", "success": False})
 
 
 def plain_text_exception_handler(request: Request, exc: Exception) -> Response:
-    """Default handler for exceptions subclassed from HTTPException."""
     tb = traceback.format_exc()
     status_code = getattr(exc, "status_code", HTTP_500_INTERNAL_SERVER_ERROR)
-    detail = getattr(exc, "detail", "")
-
-    return Response(
-        media_type=MediaType.TEXT,
-        content=tb,
-        status_code=status_code,
-    )
+    return Response(media_type=MediaType.TEXT, content=tb, status_code=status_code)
 
 
 def start_server():
-    init_models_and_workers(
-        workers=5
-    )  # Initialize models and workers with a default worker count of 5
-    port = os.environ.get("MARKER_PORT")
-    if port is None:
-        port = 2718
+    init_models_and_workers(workers=5)
+    port = os.environ.get("MARKER_PORT", 2718)
     app = Litestar(
         route_handlers=[PDFProcessor],
         exception_handlers={Exception: plain_text_exception_handler},
     )
-
     run_config = uvicorn.Config(app, port=port, host="0.0.0.0")
     server = uvicorn.Server(run_config)
-    signal.signal(
-        signal.SIGINT, lambda s, f: shutdown()
-    )  # Updated to catch Control-C and run shutdown
+    signal.signal(signal.SIGINT, lambda s, f: shutdown())
     server.run()
     shutdown()
 
