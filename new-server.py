@@ -298,7 +298,7 @@ class PDFProcessor(Controller):
         finally:
             shutil.rmtree(doc_dir)
 
-    @post("/api/v1/marker")
+    @post(path="/api/v1/marker", media_type=MediaType.TEXT)
     async def process_pdf_upload(
         self,
         file: Annotated[UploadFile, Body(media_type=RequestEncodingType.MULTI_PART)],
@@ -336,7 +336,7 @@ class PDFProcessor(Controller):
             "request_check_url": f"/api/v1/marker/{str(request_id)}",
         }
 
-    @get("/api/v1/marker/{request_id:int}")
+    @get(path="/api/v1/marker/{request_id:int}")
     async def get_request_status(
         self,
         request_id: int = Parameter(
