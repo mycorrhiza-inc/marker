@@ -289,7 +289,7 @@ class PDFProcessor(Controller):
                 markdown_content = f.read()
 
             request_status[request_id].update(
-                status="complete", success=True, markdown=markdown_content, page_count=1
+                status="complete", success=str(True), markdown=markdown_content
             )  # Simplified for example
         except Exception as e:
             request_status[request_id].update(
@@ -317,8 +317,8 @@ class PDFProcessor(Controller):
 
         request_status[request_id] = {
             "status": "processing",
-            "success": True,
-            "request_id": request_id,
+            "success": str(True),
+            "request_id": str(request_id),
             "request_check_url": f"https://marker.kessler.xyz/api/v1/marker/{str(request_id)}",
             "request_check_url_leaf": f"/api/v1/marker/{str(request_id)}",
         }
@@ -331,9 +331,9 @@ class PDFProcessor(Controller):
         # task.add_done_callback(background_tasks.discard)
 
         return {
-            "success": True,
-            "error": None,
-            "request_id": request_id,
+            "success": str(True),
+            "error": "None",
+            "request_id": str(request_id),
             "request_check_url": f"/api/v1/marker/{str(request_id)}",
         }
 
