@@ -189,7 +189,15 @@ import requests
 import uvicorn
 
 
- import random
+import random
+
+# Process the file in the background
+# This is a simplified demonstration; ideally, use background task queue like Celery
+import asyncio
+
+background_tasks = set()
+
+
 def rand_string() -> str:
     return base64.urlsafe_b64encode(secrets.token_bytes(8)).decode()
 
@@ -311,14 +319,13 @@ class PDFProcessor(Controller):
             "request_id": request_id,
             "request_check_url": f"/api/v1/marker/{str(request_id)}",
         }
-
-        # Process the file in the background
-        # This is a simplified demonstration; ideally, use background task queue like Celery
-        import asyncio
-
-        asyncio.create_task(
-            self.process_pdf_from_given_docdir(request_id, doc_dir)
-        )
+        asyncio.create_task(self.process_pdf_from_given_docdir(request_id, doc_dir))
+        # Uncessesary, state is managed in the memory queue.
+        # task = asyncio.create_task(
+        #     self.process_pdf_from_given_docdir(request_id, doc_dir)
+        # )
+        # background_tasks.add(task)
+        # task.add_done_callback(background_tasks.discard)
 
         return {
             "success": True,
