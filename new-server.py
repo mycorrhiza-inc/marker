@@ -184,6 +184,7 @@ from litestar import MediaType, Request, Litestar, Controller, Response, post, g
 from litestar.datastructures import UploadFile
 from litestar.enums import RequestEncodingType
 from litestar.params import Body
+from litestar.params import Parameter
 from litestar.status_codes import HTTP_500_INTERNAL_SERVER_ERROR
 import requests
 import uvicorn
@@ -297,7 +298,7 @@ class PDFProcessor(Controller):
         finally:
             shutil.rmtree(doc_dir)
 
-    @post("/api/v1/marker", media_type=MediaType.JSON)
+    @post("/api/v1/marker")
     async def process_pdf_upload(
         self,
         file: Annotated[UploadFile, Body(media_type=RequestEncodingType.MULTI_PART)],
@@ -335,8 +336,13 @@ class PDFProcessor(Controller):
             "request_check_url": f"/api/v1/marker/{str(request_id)}",
         }
 
-    @get("/api/v1/marker/{request_id}", media_type=MediaType.JSON)
-    async def get_request_status(self, request_id: int) -> dict:
+    @get("/api/v1/marker/{request_id:int}")
+    async def get_request_status(
+        self,
+        request_id: int = Parameter(
+            title="Request ID", description="Request id to retieve"
+        ),
+    ) -> dict:
         return request_status.get(request_id, {"status": "not_found", "success": False})
 
 
