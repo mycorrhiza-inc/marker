@@ -301,11 +301,12 @@ class PDFProcessor(Controller):
     @post(path="/api/v1/marker", media_type=MediaType.TEXT)
     async def process_pdf_upload(
         self,
-        file: Annotated[UploadFile, Body(media_type=RequestEncodingType.MULTI_PART)],
+        data: Annotated[UploadFile, Body(media_type=RequestEncodingType.MULTI_PART)],
         # angs: Annotated[str, Body()] = "en",
         # orce_ocr: Annotated[bool, Body()] = False,
         # aginate: Annotated[bool, Body()] = False,
     ) -> dict:
+        file = data.file
         request_id = random.randint(100000, 999999)
         doc_dir = MARKER_TMP_DIR / Path(str(request_id))
         os.makedirs(doc_dir / Path("in"), exist_ok=True)
