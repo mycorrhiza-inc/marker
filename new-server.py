@@ -189,6 +189,7 @@ import requests
 import uvicorn
 
 
+ import random
 def rand_string() -> str:
     return base64.urlsafe_b64encode(secrets.token_bytes(8)).decode()
 
@@ -292,23 +293,23 @@ class PDFProcessor(Controller):
     async def process_pdf_upload(
         self,
         file: Annotated[UploadFile, Body(media_type=RequestEncodingType.MULTI_PART)],
-        langs: Annotated[str, Body()],
+        langs: Annotated[str, Body()] = "en",
         force_ocr: Annotated[bool, Body()] = False,
         paginate: Annotated[bool, Body()] = False,
     ) -> dict:
-        request_id = rand_string()
-        doc_dir = MARKER_TMP_DIR / Path(request_id)
+        request_id = random.randint(100000, 999999)
+        doc_dir = MARKER_TMP_DIR / Path(str(request_id))
         os.makedirs(doc_dir / Path("in"), exist_ok=True)
         pdf_filename = doc_dir / Path("in") / Path(rand_string() + ".pdf")
 
         with open(pdf_filename, "wb") as f:
             f.write(file.read())
 
-        request_status[int(request_id)] = {
+        request_status[request_id] = {
             "status": "processing",
             "success": True,
-            "request_id": int(request_id),
-            "request_check_url": f"/api/v1/marker/{request_id}",
+            "request_id": request_id,
+            "request_check_url": f"/api/v1/marker/{str(request_id)}",
         }
 
         # Process the file in the background
@@ -316,14 +317,14 @@ class PDFProcessor(Controller):
         import asyncio
 
         asyncio.create_task(
-            self.process_pdf_from_given_docdir(int(request_id), doc_dir)
+            self.process_pdf_from_given_docdir(request_id, doc_dir)
         )
 
         return {
             "success": True,
             "error": None,
-            "request_id": int(request_id),
-            "request_check_url": f"/api/v1/marker/{request_id}",
+            "request_id": request_id,
+            "request_check_url": f"/api/v1/marker/{str(request_id)}",
         }
 
     @get("/api/v1/marker/{request_id}", media_type=MediaType.JSON)
