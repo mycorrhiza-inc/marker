@@ -63,8 +63,6 @@ services:
       - 2718:2718
     expose:
       - 2718
-    env_file:
-      - .env
     volumes:
       - "./volumes/in:/app/in"
       - "./volumes/out:/app/out"
