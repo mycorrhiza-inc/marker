@@ -317,7 +317,8 @@ class PDFProcessor(Controller):
             "status": "processing",
             "success": True,
             "request_id": request_id,
-            "request_check_url": f"/api/v1/marker/{str(request_id)}",
+            "request_check_url": f"https://marker.kessler.xyz/api/v1/marker/{str(request_id)}",
+            "request_check_url_leaf": f"/api/v1/marker/{str(request_id)}",
         }
         asyncio.create_task(self.process_pdf_from_given_docdir(request_id, doc_dir))
         # Uncessesary, state is managed in the memory queue.
