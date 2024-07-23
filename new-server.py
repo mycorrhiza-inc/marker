@@ -302,9 +302,9 @@ class PDFProcessor(Controller):
     async def process_pdf_upload(
         self,
         file: Annotated[UploadFile, Body(media_type=RequestEncodingType.MULTI_PART)],
-        langs: Annotated[str, Body()] = "en",
-        force_ocr: Annotated[bool, Body()] = False,
-        paginate: Annotated[bool, Body()] = False,
+        # angs: Annotated[str, Body()] = "en",
+        # orce_ocr: Annotated[bool, Body()] = False,
+        # aginate: Annotated[bool, Body()] = False,
     ) -> dict:
         request_id = random.randint(100000, 999999)
         doc_dir = MARKER_TMP_DIR / Path(str(request_id))
