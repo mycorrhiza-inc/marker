@@ -1,4 +1,6 @@
 import os
+
+from requests.api import request
 import pypdfium2  # Needs to be at the top to avoid warnings
 import argparse
 import torch.multiprocessing as mp
@@ -196,8 +198,6 @@ import random
 # This is a simplified demonstration; ideally, use background task queue like Celery
 import asyncio
 
-background_tasks = set()
-
 
 def rand_string() -> str:
     return base64.urlsafe_b64encode(secrets.token_bytes(8)).decode()
@@ -234,6 +234,7 @@ class RequestStatus(BaseModel):
     success: bool
     request_id: int
     request_check_url: str
+    request_check_url_leaf: str
     markdown: Optional[str] = None
     meta: Optional[dict] = None
     error: Optional[str] = None
@@ -242,9 +243,21 @@ class RequestStatus(BaseModel):
 
 # In-memory store (simple example, use a persistent store in practice)
 request_status = {}
+request_queue = []
 
 
 class PDFProcessor(Controller):
+    async def run_background_process(self, request_id: int, doc_dir: Path):
+        global request_queue
+        request_queue.append(request_id)
+        while request_queue[0] != request_id:
+            await asyncio.sleep(1)
+        result = await self.process_pdf_from_given_docdir(request_id, doc_dir)
+        # Only remove the top line of the request after it is finished processing, this should force that to happen
+        if result is None:
+            if request_queue[0] == request_id:
+                request_queue = request_queue[1:]
+
     async def process_pdf_from_given_docdir(
         self, request_id: int, doc_dir: Path
     ) -> None:
@@ -278,6 +291,7 @@ class PDFProcessor(Controller):
 
             output_filename = pdf_to_md_path(first_pdf_filepath)
             if not os.path.exists(output_filename):
+                # TODO : Add validation for task results instead of a dict
                 request_status[request_id].update(
                     status="error",
                     success=False,
@@ -288,10 +302,12 @@ class PDFProcessor(Controller):
             with open(output_filename, "r") as f:
                 markdown_content = f.read()
 
+            # TODO : Add validation for task results instead of a dict
             request_status[request_id].update(
                 status="complete", success=str(True), markdown=markdown_content
             )  # Simplified for example
         except Exception as e:
+            # TODO : Add validation for task results instead of a dict
             request_status[request_id].update(
                 status="error", success=False, error=str(e)
             )
@@ -315,6 +331,7 @@ class PDFProcessor(Controller):
         with open(pdf_filename, "wb") as f:
             f.write(file.read())
 
+        # TODO : Add validation for task results instead of a dict
         request_status[request_id] = {
             "status": "processing",
             "success": str(True),
@@ -322,7 +339,7 @@ class PDFProcessor(Controller):
             "request_check_url": f"https://marker.kessler.xyz/api/v1/marker/{str(request_id)}",
             "request_check_url_leaf": f"/api/v1/marker/{str(request_id)}",
         }
-        asyncio.create_task(self.process_pdf_from_given_docdir(request_id, doc_dir))
+        asyncio.create_task(self.run_background_process(request_id, doc_dir))
         # Uncessesary, state is managed in the memory queue.
         # task = asyncio.create_task(
         #     self.process_pdf_from_given_docdir(request_id, doc_dir)
@@ -330,6 +347,7 @@ class PDFProcessor(Controller):
         # background_tasks.add(task)
         # task.add_done_callback(background_tasks.discard)
 
+        # TODO : Add validation for task results instead of a dict
         return {
             "success": str(True),
             "error": "None",
