@@ -246,78 +246,76 @@ request_status = {}
 request_queue = []
 
 
-class PDFProcessor(Controller):
-    async def run_background_process(self, request_id: int, doc_dir: Path):
-        global request_queue
-        request_queue.append(request_id)
-        while request_queue[0] != request_id:
-            await asyncio.sleep(1)
-        try:
-            result = await self.process_pdf_from_given_docdir(request_id, doc_dir)
-            # Only remove the top line of the request after it is finished processing, this should force that to happen
-        except Exception as e:
+async def run_background_process(request_id: int, doc_dir: Path):
+    global request_queue
+    request_queue.append(request_id)
+    while request_queue[0] != request_id:
+        await asyncio.sleep(1)
+    try:
+        result = await process_pdf_from_given_docdir(request_id, doc_dir)
+        # Only remove the top line of the request after it is finished processing, this should force that to happen
+    except Exception as e:
+        if request_queue[0] == request_id:
+            request_queue = request_queue[1:]
+        raise e
+    else:
+        if result is None:
             if request_queue[0] == request_id:
                 request_queue = request_queue[1:]
-            raise e
-        else:
-            if request_queue[0] == request_id:
-                request_queue = request_queue[1:]
 
-    async def process_pdf_from_given_docdir(
-        self, request_id: int, doc_dir: Path
-    ) -> None:
-        try:
-            input_directory = doc_dir / Path("in")
-            output_directory = doc_dir / Path("out")
-            os.makedirs(input_directory, exist_ok=True)
-            os.makedirs(output_directory, exist_ok=True)
 
-            def get_pdf_files(pdf_path: Path) -> list[Path]:
-                if not pdf_path.is_dir():
-                    raise ValueError("Path is not a directory")
-                return [
-                    f for f in pdf_path.iterdir() if f.is_file() and f.suffix == ".pdf"
-                ]
+async def process_pdf_from_given_docdir(request_id: int, doc_dir: Path) -> None:
+    try:
+        input_directory = doc_dir / Path("in")
+        output_directory = doc_dir / Path("out")
+        os.makedirs(input_directory, exist_ok=True)
+        os.makedirs(output_directory, exist_ok=True)
 
-            pdf_list = get_pdf_files(input_directory)
-            if len(pdf_list) == 0:
-                request_status[request_id].update(
-                    status="error", success=False, error="No PDF files found"
-                )
-                return
+        def get_pdf_files(pdf_path: Path) -> list[Path]:
+            if not pdf_path.is_dir():
+                raise ValueError("Path is not a directory")
+            return [f for f in pdf_path.iterdir() if f.is_file() and f.suffix == ".pdf"]
 
-            first_pdf_filepath = pdf_list[0]
-            process_single_pdf(first_pdf_filepath, output_directory)
-
-            def pdf_to_md_path(pdf_path: Path) -> Path:
-                return (pdf_path.parent).parent / Path(
-                    f"out/{pdf_path.stem}/{pdf_path.stem}.md"
-                )
-
-            output_filename = pdf_to_md_path(first_pdf_filepath)
-            if not os.path.exists(output_filename):
-                # TODO : Add validation for task results instead of a dict
-                request_status[request_id].update(
-                    status="error",
-                    success=False,
-                    error=f"Output markdown file not found at : {output_filename}",
-                )
-                return
-
-            with open(output_filename, "r") as f:
-                markdown_content = f.read()
-
-            # TODO : Add validation for task results instead of a dict
+        pdf_list = get_pdf_files(input_directory)
+        if len(pdf_list) == 0:
             request_status[request_id].update(
-                status="complete", success=str(True), markdown=markdown_content
-            )  # Simplified for example
-        except Exception as e:
-            # TODO : Add validation for task results instead of a dict
-            request_status[request_id].update(
-                status="error", success=False, error=str(e)
+                status="error", success=False, error="No PDF files found"
             )
-        finally:
-            shutil.rmtree(doc_dir)
+            return
+
+        first_pdf_filepath = pdf_list[0]
+        process_single_pdf(first_pdf_filepath, output_directory)
+
+        def pdf_to_md_path(pdf_path: Path) -> Path:
+            return (pdf_path.parent).parent / Path(
+                f"out/{pdf_path.stem}/{pdf_path.stem}.md"
+            )
+
+        output_filename = pdf_to_md_path(first_pdf_filepath)
+        if not os.path.exists(output_filename):
+            # TODO : Add validation for task results instead of a dict
+            request_status[request_id].update(
+                status="error",
+                success=False,
+                error=f"Output markdown file not found at : {output_filename}",
+            )
+            return
+
+        with open(output_filename, "r") as f:
+            markdown_content = f.read()
+
+        # TODO : Add validation for task results instead of a dict
+        request_status[request_id].update(
+            status="complete", success=str(True), markdown=markdown_content
+        )  # Simplified for example
+    except Exception as e:
+        # TODO : Add validation for task results instead of a dict
+        request_status[request_id].update(status="error", success=False, error=str(e))
+    finally:
+        shutil.rmtree(doc_dir)
+
+
+class PDFProcessor(Controller):
 
     @post(path="/api/v1/marker")
     async def process_pdf_upload(
@@ -344,7 +342,7 @@ class PDFProcessor(Controller):
             "request_check_url": f"https://marker.kessler.xyz/api/v1/marker/{str(request_id)}",
             "request_check_url_leaf": f"/api/v1/marker/{str(request_id)}",
         }
-        asyncio.create_task(self.run_background_process(request_id, doc_dir))
+        asyncio.create_task(run_background_process(request_id, doc_dir))
         # Uncessesary, state is managed in the memory queue.
         # task = asyncio.create_task(
         #     self.process_pdf_from_given_docdir(request_id, doc_dir)
