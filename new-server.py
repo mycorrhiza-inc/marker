@@ -246,13 +246,13 @@ request_status = {}
 request_queue = []
 
 
-async def run_background_process(request_id: int, doc_dir: Path):
+async def run_background_process(request_id: int):
     global request_queue
     request_queue.append(request_id)
     while request_queue[0] != request_id:
         await asyncio.sleep(1)
     try:
-        result = await process_pdf_from_given_docdir(request_id, doc_dir)
+        result = await process_pdf_from_given_docdir(request_id)
         # Only remove the top line of the request after it is finished processing, this should force that to happen
     except Exception as e:
         if request_queue[0] == request_id:
@@ -264,7 +264,8 @@ async def run_background_process(request_id: int, doc_dir: Path):
                 request_queue = request_queue[1:]
 
 
-async def process_pdf_from_given_docdir(request_id: int, doc_dir: Path) -> None:
+async def process_pdf_from_given_docdir(request_id: int) -> None:
+    doc_dir = MARKER_TMP_DIR / Path(str(request_id))
     try:
         input_directory = doc_dir / Path("in")
         output_directory = doc_dir / Path("out")
@@ -329,7 +330,7 @@ class PDFProcessor(Controller):
         request_id = random.randint(100000, 999999)
         doc_dir = MARKER_TMP_DIR / Path(str(request_id))
         os.makedirs(doc_dir / Path("in"), exist_ok=True)
-        pdf_filename = doc_dir / Path("in") / Path(rand_string() + ".pdf")
+        pdf_filename = doc_dir / Path("in") / Path(str(request_id) + ".pdf")
 
         with open(pdf_filename, "wb") as f:
             f.write(file.read())
@@ -342,7 +343,7 @@ class PDFProcessor(Controller):
             "request_check_url": f"https://marker.kessler.xyz/api/v1/marker/{str(request_id)}",
             "request_check_url_leaf": f"/api/v1/marker/{str(request_id)}",
         }
-        asyncio.create_task(run_background_process(request_id, doc_dir))
+        asyncio.create_task(run_background_process(request_id))
         # Uncessesary, state is managed in the memory queue.
         # task = asyncio.create_task(
         #     self.process_pdf_from_given_docdir(request_id, doc_dir)
