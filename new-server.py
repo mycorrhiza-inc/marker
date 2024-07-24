@@ -334,7 +334,8 @@ class PDFProcessor(Controller):
             "success": str(True),
             "error": "None",
             "request_id": str(request_id),
-            "request_check_url": f"/api/v1/marker/{str(request_id)}",
+            "request_check_url": f"https://marker.kessler.xyz/api/v1/marker/{str(request_id)}",
+            "request_check_url_leaf": f"/api/v1/marker/{str(request_id)}",
         }
 
     @get(path="/api/v1/marker/{request_id:int}")
