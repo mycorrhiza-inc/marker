@@ -285,8 +285,14 @@ def pop_from_queue() -> Optional[int]:
     request_id = redis_client.lpop(REDIS_QUEUE_KEY)
     if isinstance(request_id, int):
         return request_id
-    logger.info(type(request_id))
-    return None
+    if isinstance(request_id, str):
+        return int(request_id)
+    if request_id is None:
+        return None
+    logger.error(type(request_id))
+    raise Exception(
+        f"Request id is not string or none and is {type(request_id)} instead."
+    )
 
 
 async def run_background_process(request_id: int):
