@@ -9,7 +9,8 @@ services:
               device_ids: ["0"]
               capabilities: [gpu]
     environment:
-      - MARKER_PORT = 2718
+      - MARKER_PORT=2718
+      - REDIS_HOST=redis
     ports:
       - 2718:2718
     expose:
@@ -19,3 +20,10 @@ services:
       - "./volumes/out:/app/out"
     command: "poetry run python3 new-server.py"
     restart: always
+
+  redis:
+    image: "redis:alpine"
+    expose:
+      - 6379
+    ports:
+      - "6379:6379"

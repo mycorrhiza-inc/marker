@@ -178,6 +178,10 @@ import signal
 import shutil
 import sys
 import traceback
+import asyncio
+import random
+import aioredis
+import threading
 
 from pathlib import Path
 from pydantic import BaseModel
@@ -190,13 +194,6 @@ from litestar.params import Parameter
 from litestar.status_codes import HTTP_500_INTERNAL_SERVER_ERROR
 import requests
 import uvicorn
-
-
-import random
-
-# Process the file in the background
-# This is a simplified demonstration; ideally, use background task queue like Celery
-import asyncio
 
 
 def rand_string() -> str:
@@ -242,29 +239,41 @@ class RequestStatus(BaseModel):
 
 
 # In-memory store (simple example, use a persistent store in practice)
-request_status = {}
-request_queue = []
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+REDIS_PORT = 6379
+REDIS_STATUS_KEY = "request_status"
+REDIS_QUEUE_KEY = "request_queue"
+
+
+async def get_redis_connection():
+    return await aioredis.create_redis_pool((REDIS_HOST, REDIS_PORT))
+
+
+async def update_status_in_redis(redis, request_id: int, status: dict):
+    await redis.hset(REDIS_STATUS_KEY, request_id, str(status))
+
+
+async def get_status_from_redis(redis, request_id: int):
+    status = await redis.hget(REDIS_STATUS_KEY, request_id)
+    return eval(status) if status else {"status": "not_found", "success": False}
+
+
+async def push_to_queue(redis, request_id: int):
+    await redis.rpush(REDIS_QUEUE_KEY, request_id)
+
+
+async def pop_from_queue(redis):
+    request_id = await redis.lpop(REDIS_QUEUE_KEY)
+    return int(request_id) if request_id else None
 
 
 async def run_background_process(request_id: int):
-    global request_queue
-    request_queue.append(request_id)
-    while request_queue[0] != request_id:
-        await asyncio.sleep(1)
-    try:
-        result = await process_pdf_from_given_docdir(request_id)
-        # Only remove the top line of the request after it is finished processing, this should force that to happen
-    except Exception as e:
-        if request_queue[0] == request_id:
-            request_queue = request_queue[1:]
-        raise e
-    else:
-        if result is None:
-            if request_queue[0] == request_id:
-                request_queue = request_queue[1:]
+    redis = await get_redis_connection()
+    await push_to_queue(redis, request_id)
 
 
 async def process_pdf_from_given_docdir(request_id: int) -> None:
+    redis = await get_redis_connection()
     doc_dir = MARKER_TMP_DIR / Path(str(request_id))
     try:
         input_directory = doc_dir / Path("in")
@@ -279,8 +288,10 @@ async def process_pdf_from_given_docdir(request_id: int) -> None:
 
         pdf_list = get_pdf_files(input_directory)
         if len(pdf_list) == 0:
-            request_status[request_id].update(
-                status="error", success=False, error="No PDF files found"
+            await update_status_in_redis(
+                redis,
+                request_id,
+                {"status": "error", "success": False, "error": "No PDF files found"},
             )
             return
 
@@ -294,70 +305,68 @@ async def process_pdf_from_given_docdir(request_id: int) -> None:
 
         output_filename = pdf_to_md_path(first_pdf_filepath)
         if not os.path.exists(output_filename):
-            # TODO : Add validation for task results instead of a dict
-            request_status[request_id].update(
-                status="error",
-                success=False,
-                error=f"Output markdown file not found at : {output_filename}",
+            await update_status_in_redis(
+                redis,
+                request_id,
+                {
+                    "status": "error",
+                    "success": False,
+                    "error": f"Output markdown file not found at : {output_filename}",
+                },
             )
             return
 
         with open(output_filename, "r") as f:
             markdown_content = f.read()
 
-        # TODO : Add validation for task results instead of a dict
-        request_status[request_id].update(
-            status="complete", success=str(True), markdown=markdown_content
-        )  # Simplified for example
+        await update_status_in_redis(
+            redis,
+            request_id,
+            {"status": "complete", "success": True, "markdown": markdown_content},
+        )
     except Exception as e:
-        # TODO : Add validation for task results instead of a dict
-        request_status[request_id].update(status="error", success=False, error=str(e))
+        await update_status_in_redis(
+            redis, request_id, {"status": "error", "success": False, "error": str(e)}
+        )
     finally:
         shutil.rmtree(doc_dir)
 
 
 class PDFProcessor(Controller):
-
     @post(path="/api/v1/marker")
     async def process_pdf_upload(
         self,
         data: Annotated[UploadFile, Body(media_type=RequestEncodingType.MULTI_PART)],
-        # angs: Annotated[str, Body()] = "en",
-        # orce_ocr: Annotated[bool, Body()] = False,
-        # aginate: Annotated[bool, Body()] = False,
     ) -> dict:
         file = data.file
         request_id = random.randint(100000, 999999)
         doc_dir = MARKER_TMP_DIR / Path(str(request_id))
         os.makedirs(doc_dir / Path("in"), exist_ok=True)
-        pdf_filename = doc_dir / Path("in") / Path(str(request_id) + ".pdf")
+        pdf_filename = doc_dir / Path("in") / Path(f"{request_id}.pdf")
 
         with open(pdf_filename, "wb") as f:
             f.write(file.read())
 
-        # TODO : Add validation for task results instead of a dict
-        request_status[request_id] = {
-            "status": "processing",
-            "success": str(True),
-            "request_id": str(request_id),
-            "request_check_url": f"https://marker.kessler.xyz/api/v1/marker/{str(request_id)}",
-            "request_check_url_leaf": f"/api/v1/marker/{str(request_id)}",
-        }
-        asyncio.create_task(run_background_process(request_id))
-        # Uncessesary, state is managed in the memory queue.
-        # task = asyncio.create_task(
-        #     self.process_pdf_from_given_docdir(request_id, doc_dir)
-        # )
-        # background_tasks.add(task)
-        # task.add_done_callback(background_tasks.discard)
+        redis = await get_redis_connection()
+        await update_status_in_redis(
+            redis,
+            request_id,
+            {
+                "status": "processing",
+                "success": True,
+                "request_id": request_id,
+                "request_check_url": f"https://marker.kessler.xyz/api/v1/marker/{request_id}",
+                "request_check_url_leaf": f"/api/v1/marker/{request_id}",
+            },
+        )
+        await run_background_process(request_id)
 
-        # TODO : Add validation for task results instead of a dict
         return {
-            "success": str(True),
+            "success": True,
             "error": "None",
-            "request_id": str(request_id),
-            "request_check_url": f"https://marker.kessler.xyz/api/v1/marker/{str(request_id)}",
-            "request_check_url_leaf": f"/api/v1/marker/{str(request_id)}",
+            "request_id": request_id,
+            "request_check_url": f"https://marker.kessler.xyz/api/v1/marker/{request_id}",
+            "request_check_url_leaf": f"/api/v1/marker/{request_id}",
         }
 
     @get(path="/api/v1/marker/{request_id:int}")
@@ -367,13 +376,30 @@ class PDFProcessor(Controller):
             title="Request ID", description="Request id to retieve"
         ),
     ) -> dict:
-        return request_status.get(request_id, {"status": "not_found", "success": False})
+        redis = await get_redis_connection()
+        return await get_status_from_redis(redis, request_id)
 
 
 def plain_text_exception_handler(request: Request, exc: Exception) -> Response:
     tb = traceback.format_exc()
     status_code = getattr(exc, "status_code", HTTP_500_INTERNAL_SERVER_ERROR)
     return Response(media_type=MediaType.TEXT, content=tb, status_code=status_code)
+
+
+def background_worker():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    redis = loop.run_until_complete(get_redis_connection())
+
+    async def worker():
+        while True:
+            request_id = await pop_from_queue(redis)
+            if request_id:
+                await process_pdf_from_given_docdir(request_id)
+            else:
+                await asyncio.sleep(1)
+
+    loop.run_until_complete(worker())
 
 
 def start_server():
@@ -386,6 +412,11 @@ def start_server():
     run_config = uvicorn.Config(app, port=port, host="0.0.0.0")
     server = uvicorn.Server(run_config)
     signal.signal(signal.SIGINT, lambda s, f: shutdown())
+
+    # Start background worker in a separate thread
+    worker_thread = threading.Thread(target=background_worker)
+    worker_thread.start()
+
     server.run()
     shutdown()
 
