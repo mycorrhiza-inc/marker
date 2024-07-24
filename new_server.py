@@ -211,6 +211,10 @@ from litestar.params import Parameter
 from litestar.status_codes import HTTP_500_INTERNAL_SERVER_ERROR
 import requests
 import uvicorn
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 def rand_string() -> str:
@@ -263,13 +267,13 @@ redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=Tr
 
 def update_status_in_redis(request_id: int, status: Dict[str, str]) -> None:
     test = redis_client.hmset(str(request_id), status)
-    return test
 
 
 def get_status_from_redis(request_id: int) -> dict:
     status = redis_client.hgetall(str(request_id))
     if status is None:
         return {"status": "not_found", "success": str(False)}
+    logger.info(type(status))
     return status
 
 
@@ -279,7 +283,10 @@ def push_to_queue(request_id: int):
 
 def pop_from_queue() -> Optional[int]:
     request_id = redis_client.lpop(REDIS_QUEUE_KEY)
-    return int(request_id) if request_id else None
+    if isinstance(request_id, int):
+        return request_id
+    logger.info(type(request_id))
+    return None
 
 
 async def run_background_process(request_id: int):
@@ -396,7 +403,7 @@ def plain_text_exception_handler(request: Request, exc: Exception) -> Response:
 def background_worker():
     while True:
         request_id = pop_from_queue()
-        if request_id:
+        if request_id is not None:
             process_pdf_from_given_docdir(request_id)
         else:
             time.sleep(1)
@@ -404,7 +411,8 @@ def background_worker():
 
 def start_server():
     init_models_and_workers(workers=5)
-    port = os.environ.get("MARKER_PORT", 2718)
+    # port = os.environ.get("MARKER_PORT", 2718)
+    port = 2718
     app = Litestar(
         route_handlers=[PDFProcessor],
         exception_handlers={Exception: plain_text_exception_handler},
