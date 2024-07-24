@@ -18,7 +18,7 @@ services:
     volumes:
       - "./volumes/in:/app/in"
       - "./volumes/out:/app/out"
-    command: "poetry run python3 new-server.py"
+    command: "poetry run python3 new_server.py"
     restart: always
 
   redis:
