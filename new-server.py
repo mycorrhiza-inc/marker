@@ -252,9 +252,14 @@ class PDFProcessor(Controller):
         request_queue.append(request_id)
         while request_queue[0] != request_id:
             await asyncio.sleep(1)
-        result = await self.process_pdf_from_given_docdir(request_id, doc_dir)
-        # Only remove the top line of the request after it is finished processing, this should force that to happen
-        if result is None:
+        try:
+            result = await self.process_pdf_from_given_docdir(request_id, doc_dir)
+            # Only remove the top line of the request after it is finished processing, this should force that to happen
+        except Exception as e:
+            if request_queue[0] == request_id:
+                request_queue = request_queue[1:]
+            raise e
+        else:
             if request_queue[0] == request_id:
                 request_queue = request_queue[1:]
 
