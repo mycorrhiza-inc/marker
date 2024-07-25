@@ -287,11 +287,14 @@ def pop_from_queue() -> Optional[int]:
 
 def process_pdf_from_given_docdir(request_id: int) -> None:
     doc_dir = MARKER_TMP_DIR / Path(str(request_id))
+    print(doc_dir, file=sys.stderr)
     try:
         input_directory = doc_dir / Path("in")
         output_directory = doc_dir / Path("out")
         os.makedirs(input_directory, exist_ok=True)
         os.makedirs(output_directory, exist_ok=True)
+        print(input_directory, file=sys.stderr)
+        print(output_directory, file=sys.stderr)
 
         def get_pdf_files(pdf_path: Path) -> list[Path]:
             if not pdf_path.is_dir():
@@ -381,15 +384,18 @@ def pdf_to_md_path(pdf_path: Path) -> Path:
 
 
 def background_worker():
-    logger.info("Starting Background Worker")
+    print("Starting Background Worker", file=sys.stderr)
     while True:
         request_id = pop_from_queue()
         if request_id is not None:
-            logger.info(f"Beginning to Process pdf with request: {request_id}")
+            print(
+                f"Beginning to Process pdf with request: {request_id}", file=sys.stderr
+            )
             process_pdf_from_given_docdir(request_id)
         else:
-
-            logger.info("No new pdf's to process checking again in 1 second.")
+            print(
+                "No new pdf's to process checking again in 1 second.", file=sys.stderr
+            )
             time.sleep(1)
 
 
