@@ -388,8 +388,6 @@ def start_server():
     worker_thread = threading.Thread(target=background_worker)
     worker_thread.start()
 
-    shutdown()
-
 
 if __name__ == "__main__":
     start_server()
