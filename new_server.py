@@ -112,6 +112,7 @@ def process_single_pdf(
     except Exception as e:
         print(f"Error converting {filepath}: {e}")
         print(traceback.format_exc())
+        raise e
 
 
 def process_pdfs_core_server(
@@ -209,16 +210,15 @@ from litestar.enums import RequestEncodingType
 from litestar.params import Body
 from litestar.params import Parameter
 from litestar.status_codes import HTTP_500_INTERNAL_SERVER_ERROR
-import requests
 import uvicorn
 import logging
 
 
+import fitz  # PyMuPDF
+import numpy as np
+
+
 logger = logging.getLogger(__name__)
-
-
-def rand_string() -> str:
-    return base64.urlsafe_b64encode(secrets.token_bytes(8)).decode()
 
 
 class BaseMarkerCliInput(BaseModel):
@@ -259,30 +259,19 @@ class RequestStatus(BaseModel):
 
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = 6379
-REDIS_STATUS_KEY = "request_status"
-REDIS_BACKGROUND_QUEUE_KEY = "request_queue_background"
-REDIS_PRIORITY_QUEUE_KEY = "request_queue_priority"
+REDIS_STATUS_KEY = os.getenv("REDIS_STATUS_KEY", "request_status")
+REDIS_BACKGROUND_QUEUE_KEY = os.getenv(
+    "REDIS_BACKGROUND_QUEUE_KEY", "request_queue_background"
+)
+REDIS_PRIORITY_QUEUE_KEY = os.getenv(
+    "REDIS_PRIORITY_QUEUE_KEY", "request_queue_priority"
+)
 
 redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
 
 
 def update_status_in_redis(request_id: int, status: Dict[str, str]) -> None:
     test = redis_client.hmset(str(request_id), status)
-
-
-def get_status_from_redis(request_id: int) -> dict:
-    status = redis_client.hgetall(str(request_id))
-    if status is None:
-        return {"status": "not_found", "success": str(False)}
-    logger.info(type(status))
-    return status
-
-
-def push_to_queue(request_id: int, priority: bool):
-    if priority:
-        redis_client.rpush(REDIS_BACKGROUND_QUEUE_KEY, request_id)
-    else:
-        redis_client.rpush(REDIS_PRIORITY_QUEUE_KEY, request_id)
 
 
 # Clean up definition stuff at some point
@@ -306,10 +295,6 @@ def pop_from_queue() -> Optional[int]:
     )
 
 
-async def run_background_process(request_id: int, priority: bool):
-    push_to_queue(request_id, priority)
-
-
 def process_pdf_from_given_docdir(request_id: int) -> None:
     doc_dir = MARKER_TMP_DIR / Path(str(request_id))
     try:
@@ -327,36 +312,38 @@ def process_pdf_from_given_docdir(request_id: int) -> None:
         if len(pdf_list) == 0:
             update_status_in_redis(
                 request_id,
-                {"status": "error", "success": False, "error": "No PDF files found"},
-            )
-            return
-
-        first_pdf_filepath = pdf_list[0]
-        process_single_pdf(first_pdf_filepath, output_directory)
-
-        def pdf_to_md_path(pdf_path: Path) -> Path:
-            return (pdf_path.parent).parent / Path(
-                f"out/{pdf_path.stem}/{pdf_path.stem}.md"
-            )
-
-        output_filename = pdf_to_md_path(first_pdf_filepath)
-        if not os.path.exists(output_filename):
-            update_status_in_redis(
-                request_id,
                 {
                     "status": "error",
                     "success": str(False),
-                    "error": f"Output markdown file not found at : {output_filename}",
+                    "error": "No PDF file found",
                 },
             )
             return
 
-        with open(output_filename, "r") as f:
-            markdown_content = f.read()
+        first_pdf_filepath = pdf_list[0]
+        chunk_paths = split_large_pdf(first_pdf_filepath)
+
+        full_markdown = ""
+        for chunk_path in chunk_paths:
+            process_single_pdf(chunk_path, output_directory)
+            chunk_markdown_path = pdf_to_md_path(chunk_path)
+            if not os.path.exists(chunk_markdown_path):
+                update_status_in_redis(
+                    request_id,
+                    {
+                        "status": "error",
+                        "success": str(False),
+                        "error": f"Output markdown file not found at : {chunk_markdown_path}",
+                    },
+                )
+                return
+
+            with open(chunk_markdown_path, "r") as f:
+                full_markdown += f.read()
 
         update_status_in_redis(
             request_id,
-            {"status": "complete", "success": str(True), "markdown": markdown_content},
+            {"status": "complete", "success": str(True), "markdown": full_markdown},
         )
     except Exception as e:
         update_status_in_redis(
@@ -366,58 +353,36 @@ def process_pdf_from_given_docdir(request_id: int) -> None:
         shutil.rmtree(doc_dir)
 
 
-class PDFProcessor(Controller):
-    @post(path="/api/v1/marker")
-    async def process_pdf_upload(
-        self,
-        data: Annotated[UploadFile, Body(media_type=RequestEncodingType.MULTI_PART)],
-        priority: bool = True,
-    ) -> dict:
-        file = data.file
-        request_id = random.randint(100000, 999999)
-        doc_dir = MARKER_TMP_DIR / Path(str(request_id))
-        os.makedirs(doc_dir / Path("in"), exist_ok=True)
-        pdf_filename = doc_dir / Path("in") / Path(f"{request_id}.pdf")
+def split_large_pdf(pdf_path: Path, max_pages: int = 300) -> list[Path]:
+    doc = fitz.open(pdf_path)
+    num_pages = doc.page_count
+    chunk_paths = []
 
-        with open(pdf_filename, "wb") as f:
-            f.write(file.read())
+    if num_pages <= max_pages:
+        return [pdf_path]
 
-        update_status_in_redis(
-            request_id,
-            {
-                "status": "processing",
-                "success": str(True),
-                "request_id": str(request_id),
-                "request_check_url": f"https://marker.kessler.xyz/api/v1/marker/{request_id}",
-                "request_check_url_leaf": f"/api/v1/marker/{request_id}",
-                "priority": str(priority),
-            },
-        )
-        await run_background_process(request_id, priority)
+    base_path = pdf_path.parent / Path("chunks")
+    os.makedirs(base_path, exist_ok=True)
 
-        return {
-            "success": True,
-            "error": "None",
-            "request_id": str(request_id),
-            "request_check_url": f"https://marker.kessler.xyz/api/v1/marker/{request_id}",
-            "request_check_url_leaf": f"/api/v1/marker/{request_id}",
-            "priority": str(priority),
-        }
+    split_ranges = np.array_split(range(num_pages), np.ceil(num_pages / max_pages))
 
-    @get(path="/api/v1/marker/{request_id:int}")
-    async def get_request_status(
-        self,
-        request_id: int = Parameter(
-            title="Request ID", description="Request id to retieve"
-        ),
-    ) -> dict:
-        return get_status_from_redis(request_id)
+    for idx, page_range in enumerate(split_ranges):
+        chunk_path = base_path / f"{pdf_path.stem}_chunk{idx + 1}.pdf"
+        chunk_doc = fitz.open()
+
+        for page_num in page_range:
+            chunk_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
+
+        chunk_doc.save(chunk_path)
+        chunk_doc.close()
+        chunk_paths.append(chunk_path)
+
+    doc.close()
+    return chunk_paths
 
 
-def plain_text_exception_handler(request: Request, exc: Exception) -> Response:
-    tb = traceback.format_exc()
-    status_code = getattr(exc, "status_code", HTTP_500_INTERNAL_SERVER_ERROR)
-    return Response(media_type=MediaType.TEXT, content=tb, status_code=status_code)
+def pdf_to_md_path(pdf_path: Path) -> Path:
+    return (pdf_path.parent).parent / Path(f"out/{pdf_path.stem}/{pdf_path.stem}.md")
 
 
 def background_worker():
@@ -431,21 +396,11 @@ def background_worker():
 
 def start_server():
     init_models_and_workers(workers=5)
-    # port = os.environ.get("MARKER_PORT", 2718)
-    port = 2718
-    app = Litestar(
-        route_handlers=[PDFProcessor],
-        exception_handlers={Exception: plain_text_exception_handler},
-    )
-    run_config = uvicorn.Config(app, port=port, host="0.0.0.0")
-    server = uvicorn.Server(run_config)
-    signal.signal(signal.SIGINT, lambda s, f: shutdown())
 
     # Start background worker in a separate thread
     worker_thread = threading.Thread(target=background_worker)
     worker_thread.start()
 
-    server.run()
     shutdown()
 
 
