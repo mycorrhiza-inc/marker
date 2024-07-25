@@ -383,10 +383,7 @@ def background_worker():
 
 def start_server():
     init_models_and_workers(workers=5)
-
-    # Start background worker in a separate thread
-    worker_thread = threading.Thread(target=background_worker)
-    worker_thread.start()
+    background_worker()
 
 
 if __name__ == "__main__":
