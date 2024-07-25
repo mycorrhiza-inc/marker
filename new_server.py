@@ -204,6 +204,7 @@ import logging
 import pymupdf  # PyMuPDF
 import numpy as np
 
+import sys
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
@@ -393,6 +394,8 @@ def background_worker():
 
 
 def start_server():
+    print("Test output to stdout")
+    print("Test output to stderr", file=sys.stderr)
     logger.info("Initializing models and workers.")
     init_models_and_workers(workers=5)
     background_worker()
