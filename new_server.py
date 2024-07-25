@@ -207,7 +207,7 @@ import numpy as np
 import sys
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG, stream=sys.stderr)
 
 
 class BaseMarkerCliInput(BaseModel):
