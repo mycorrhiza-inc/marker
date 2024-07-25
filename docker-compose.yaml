@@ -1,4 +1,20 @@
 services:
+  http-server:
+    build: ./http_server/
+    ports:
+      - 2718:2718
+    expose:
+      - 2718
+    volumes:
+      - "./volumes/shared:/shared/"
+    environment:
+      - MARKER_PORT=2718
+      - REDIS_HOST=redis
+      - REDIS_STATUS_KEY = request_status"
+      - REDIS_BACKGROUND_QUEUE_KEY ="request_queue_background"
+      - REDIS_PRIORITY_QUEUE_KEY ="request_queue_priority"
+      - SHARED_VOLUME_DIR ="/shared"
+    command: "python3 litestar_server.py"
   marker:
     build: .
     deploy:
@@ -11,13 +27,13 @@ services:
     environment:
       - MARKER_PORT=2718
       - REDIS_HOST=redis
-    ports:
-      - 2718:2718
-    expose:
-      - 2718
+      - REDIS_STATUS_KEY = request_status"
+      - REDIS_BACKGROUND_QUEUE_KEY ="request_queue_background"
+      - REDIS_PRIORITY_QUEUE_KEY ="request_queue_priority"
+      - SHARED_VOLUME_DIR ="/shared"
+
     volumes:
-      - "./volumes/in:/app/in"
-      - "./volumes/out:/app/out"
+      - "./volumes/shared:/shared/"
     command: "poetry run python3 new_server.py"
     restart: always
 

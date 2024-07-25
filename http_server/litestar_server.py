@@ -25,8 +25,8 @@ REDIS_BACKGROUND_QUEUE_KEY = os.getenv(
 REDIS_PRIORITY_QUEUE_KEY = os.getenv(
     "REDIS_PRIORITY_QUEUE_KEY", "request_queue_priority"
 )
-TMP_DIR = Path("/tmp")
-MARKER_TMP_DIR = TMP_DIR / Path("marker")
+SHARED_VOLUME_DIR = Path(os.getenv("SHARED_VOLUME_DIR", "/shared"))
+MARKER_TMP_DIR = SHARED_VOLUME_DIR / Path("marker")
 
 
 class PDFUploadFormData(BaseModel):
