@@ -188,29 +188,16 @@ def shutdown():
 #     process_single_pdf,
 #     shutdown,
 # )
-import base64
-import secrets
 import os
-import signal
 import shutil
-import sys
 import traceback
-import asyncio
 import time
-import random
 import redis
 import threading
 
 from pathlib import Path
 from pydantic import BaseModel
 from typing import Optional, Annotated, Any, Dict
-from litestar import MediaType, Request, Litestar, Controller, Response, post, get
-from litestar.datastructures import UploadFile
-from litestar.enums import RequestEncodingType
-from litestar.params import Body
-from litestar.params import Parameter
-from litestar.status_codes import HTTP_500_INTERNAL_SERVER_ERROR
-import uvicorn
 import logging
 
 
