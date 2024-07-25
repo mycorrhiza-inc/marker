@@ -214,7 +214,7 @@ import uvicorn
 import logging
 
 
-import fitz  # PyMuPDF
+import pymupdf  # PyMuPDF
 import numpy as np
 
 
@@ -354,7 +354,7 @@ def process_pdf_from_given_docdir(request_id: int) -> None:
 
 
 def split_large_pdf(pdf_path: Path, max_pages: int = 300) -> list[Path]:
-    doc = fitz.open(pdf_path)
+    doc = pymupdf.open(pdf_path)
     num_pages = doc.page_count
     chunk_paths = []
 
@@ -368,7 +368,7 @@ def split_large_pdf(pdf_path: Path, max_pages: int = 300) -> list[Path]:
 
     for idx, page_range in enumerate(split_ranges):
         chunk_path = base_path / f"{pdf_path.stem}_chunk{idx + 1}.pdf"
-        chunk_doc = fitz.open()
+        chunk_doc = pymupdf.open()
 
         for page_num in page_range:
             chunk_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
