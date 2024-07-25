@@ -187,12 +187,17 @@ def shutdown():
 #     init_models_and_workers,
 #     process_single_pdf,
 #     shutdown,
+#
 # )
+#
+
+# GPU / Marker Server Code Snippet
 import os
 import shutil
 import traceback
 import time
 import redis
+import boto3
 import threading
 
 from pathlib import Path
@@ -255,16 +260,27 @@ REDIS_BACKGROUND_QUEUE_KEY = os.getenv(
 REDIS_PRIORITY_QUEUE_KEY = os.getenv(
     "REDIS_PRIORITY_QUEUE_KEY", "request_queue_priority"
 )
+REDIS_S3_URLS_KEY = os.getenv("REDIS_S3_URLS_KEY", "request_s3_urls")
+S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
 
+AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
+AWS_REGION = os.getenv("AWS_REGION")
+
+s3_client = boto3.client(
+    "s3",
+    aws_access_key_id=AWS_ACCESS_KEY_ID,
+    aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+    region_name=AWS_REGION,
+)
 
 redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
 
 
 def update_status_in_redis(request_id: int, status: Dict[str, str]) -> None:
-    test = redis_client.hmset(str(request_id), status)
+    redis_client.hmset(str(request_id), status)
 
 
-# Clean up definition stuff at some point
 def pop_from_queue() -> Optional[int]:
     request_id = redis_client.lpop(REDIS_PRIORITY_QUEUE_KEY)
     if isinstance(request_id, int):
@@ -285,16 +301,33 @@ def pop_from_queue() -> Optional[int]:
     )
 
 
-def process_pdf_from_given_docdir(request_id: int) -> None:
+def download_file_from_s3(s3_url: str, local_path: Path) -> None:
+    s3_key = s3_url.split(f".s3.{AWS_REGION}.amazonaws.com/")[-1]
+    s3_client.download_file(S3_BUCKET_NAME, s3_key, str(local_path))
+
+
+def process_pdf_from_s3(request_id: int) -> None:
     doc_dir = MARKER_TMP_DIR / Path(str(request_id))
-    print(doc_dir, file=sys.stderr)
+    os.makedirs(doc_dir / Path("in"), exist_ok=True)
+    input_directory = doc_dir / Path("in")
+    output_directory = doc_dir / Path("out")
+
+    # Get PDF URL from Redis
+    s3_url = redis_client.hget(REDIS_S3_URLS_KEY, str(request_id))
+    if not s3_url:
+        update_status_in_redis(
+            request_id,
+            {"status": "error", "success": str(False), "error": "No S3 URL found"},
+        )
+        return
+
+    # Download PDF from S3
+    pdf_filename = input_directory / f"{request_id}.pdf"
+    download_file_from_s3(s3_url, pdf_filename)
+
+    # Now process as normal
     try:
-        input_directory = doc_dir / Path("in")
-        output_directory = doc_dir / Path("out")
-        os.makedirs(input_directory, exist_ok=True)
         os.makedirs(output_directory, exist_ok=True)
-        print(input_directory, file=sys.stderr)
-        print(output_directory, file=sys.stderr)
 
         def get_pdf_files(pdf_path: Path) -> list[Path]:
             if not pdf_path.is_dir():
@@ -391,7 +424,7 @@ def background_worker():
             print(
                 f"Beginning to Process pdf with request: {request_id}", file=sys.stderr
             )
-            process_pdf_from_given_docdir(request_id)
+            process_pdf_from_s3(request_id)
         else:
             print(
                 "No new pdf's to process checking again in 1 second.", file=sys.stderr
