@@ -297,6 +297,8 @@ def process_pdf_from_given_docdir(request_id: int) -> None:
 
         pdf_list = get_pdf_files(input_directory)
         if len(pdf_list) == 0:
+            logger.error(f"Encountered error while processing {request_id}")
+            logger.error("No PDF File Found.")
             update_status_in_redis(
                 request_id,
                 {
@@ -333,6 +335,8 @@ def process_pdf_from_given_docdir(request_id: int) -> None:
             {"status": "complete", "success": str(True), "markdown": full_markdown},
         )
     except Exception as e:
+        logger.error(f"Encountered error while processing {request_id}")
+        logger.error(e)
         update_status_in_redis(
             request_id, {"status": "error", "success": str(False), "error": str(e)}
         )
@@ -341,6 +345,7 @@ def process_pdf_from_given_docdir(request_id: int) -> None:
 
 
 def split_large_pdf(pdf_path: Path, max_pages: int = 300) -> list[Path]:
+    logger.info("Splitting large pdf.")
     doc = pymupdf.open(pdf_path)
     num_pages = doc.page_count
     chunk_paths = []
@@ -373,15 +378,20 @@ def pdf_to_md_path(pdf_path: Path) -> Path:
 
 
 def background_worker():
+    logger.info("Starting Background Worker")
     while True:
         request_id = pop_from_queue()
         if request_id is not None:
+            logger.info(f"Beginning to Process pdf with request: {request_id}")
             process_pdf_from_given_docdir(request_id)
         else:
+
+            logger.info("No new pdf's to process checking again in 1 second.")
             time.sleep(1)
 
 
 def start_server():
+    logger.info("Initializing models and workers.")
     init_models_and_workers(workers=5)
     background_worker()
 
