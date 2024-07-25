@@ -206,6 +206,7 @@ import numpy as np
 
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.DEBUG)
 
 
 class BaseMarkerCliInput(BaseModel):
@@ -253,6 +254,7 @@ REDIS_BACKGROUND_QUEUE_KEY = os.getenv(
 REDIS_PRIORITY_QUEUE_KEY = os.getenv(
     "REDIS_PRIORITY_QUEUE_KEY", "request_queue_priority"
 )
+
 
 redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
 
