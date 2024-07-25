@@ -260,7 +260,8 @@ class RequestStatus(BaseModel):
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = 6379
 REDIS_STATUS_KEY = "request_status"
-REDIS_QUEUE_KEY = "request_queue"
+REDIS_BACKGROUND_QUEUE_KEY = "request_queue_background"
+REDIS_PRIORITY_QUEUE_KEY = "request_queue_priority"
 
 redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
 
@@ -277,26 +278,36 @@ def get_status_from_redis(request_id: int) -> dict:
     return status
 
 
-def push_to_queue(request_id: int):
-    redis_client.rpush(REDIS_QUEUE_KEY, request_id)
+def push_to_queue(request_id: int, priority: bool):
+    if priority:
+        redis_client.rpush(REDIS_BACKGROUND_QUEUE_KEY, request_id)
+    else:
+        redis_client.rpush(REDIS_PRIORITY_QUEUE_KEY, request_id)
 
 
+# Clean up definition stuff at some point
 def pop_from_queue() -> Optional[int]:
-    request_id = redis_client.lpop(REDIS_QUEUE_KEY)
+    request_id = redis_client.lpop(REDIS_PRIORITY_QUEUE_KEY)
     if isinstance(request_id, int):
         return request_id
     if isinstance(request_id, str):
         return int(request_id)
     if request_id is None:
-        return None
+        request_id = redis_client.lpop(REDIS_BACKGROUND_QUEUE_KEY)
+        if isinstance(request_id, int):
+            return request_id
+        if isinstance(request_id, str):
+            return int(request_id)
+        if request_id is None:
+            return None
     logger.error(type(request_id))
     raise Exception(
         f"Request id is not string or none and is {type(request_id)} instead."
     )
 
 
-async def run_background_process(request_id: int):
-    push_to_queue(request_id)
+async def run_background_process(request_id: int, priority: bool):
+    push_to_queue(request_id, priority)
 
 
 def process_pdf_from_given_docdir(request_id: int) -> None:
@@ -360,6 +371,7 @@ class PDFProcessor(Controller):
     async def process_pdf_upload(
         self,
         data: Annotated[UploadFile, Body(media_type=RequestEncodingType.MULTI_PART)],
+        priority: bool = True,
     ) -> dict:
         file = data.file
         request_id = random.randint(100000, 999999)
@@ -378,9 +390,10 @@ class PDFProcessor(Controller):
                 "request_id": str(request_id),
                 "request_check_url": f"https://marker.kessler.xyz/api/v1/marker/{request_id}",
                 "request_check_url_leaf": f"/api/v1/marker/{request_id}",
+                "priority": str(priority),
             },
         )
-        await run_background_process(request_id)
+        await run_background_process(request_id, priority)
 
         return {
             "success": True,
@@ -388,6 +401,7 @@ class PDFProcessor(Controller):
             "request_id": str(request_id),
             "request_check_url": f"https://marker.kessler.xyz/api/v1/marker/{request_id}",
             "request_check_url_leaf": f"/api/v1/marker/{request_id}",
+            "priority": str(priority),
         }
 
     @get(path="/api/v1/marker/{request_id:int}")
