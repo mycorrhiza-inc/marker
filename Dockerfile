@@ -46,14 +46,14 @@ RUN apt-get update && apt-get install -y \
   libgl1-mesa-glx \
   libglib2.0-0
 
-COPY ./pyproject.toml . 
-COPY ./poetry.lock .
 
 # Update PyTorch (adjust this part based on GPU/CPU requirements)
 RUN pip install --upgrade pip
 ### GPU Only
 RUN pip install torch 
 
+COPY ./pyproject.toml . 
+COPY ./poetry.lock .
 
 # Install Python dependencies
 RUN pip install poetry
