@@ -2,6 +2,7 @@
 import os
 import traceback
 import random
+from botocore import endpoint
 import redis
 import boto3
 
@@ -16,6 +17,7 @@ from litestar.status_codes import HTTP_500_INTERNAL_SERVER_ERROR
 import uvicorn
 import logging
 
+from urllib.parse import urlparse
 
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = 6379
@@ -29,15 +31,18 @@ REDIS_PRIORITY_QUEUE_KEY = os.getenv(
 REDIS_S3_URLS_KEY = os.getenv("REDIS_S3_URLS_KEY", "request_s3_urls")
 S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
 
-AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
-AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
-AWS_REGION = os.getenv("AWS_REGION")
+S3_ACCESS_KEY_ID = os.getenv("S3_ACCESS_KEY_ID")
+S3_SECRET_ACCESS_KEY = os.getenv("S3_SECRET_ACCESS_KEY")
+S3_REGION = os.getenv("S3_REGION")
+
+S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL")
 
 s3_client = boto3.client(
     "s3",
-    aws_access_key_id=AWS_ACCESS_KEY_ID,
-    aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
-    region_name=AWS_REGION,
+    endpoint_url=S3_ENDPOINT_URL,
+    aws_access_key_id=S3_ACCESS_KEY_ID,
+    aws_secret_access_key=S3_SECRET_ACCESS_KEY,
+    region_name=S3_REGION,
 )
 
 
@@ -45,8 +50,8 @@ class PDFUploadFormData(BaseModel):
     file: bytes
 
 
-class URLUpload(BaseModel):
-    url: str
+class S3URLUpload(BaseModel):
+    s3_url: str
 
 
 class PathUpload(BaseModel):
@@ -78,34 +83,46 @@ def get_status_from_redis(request_id: int) -> dict:
 
 def push_to_queue(request_id: int, priority: bool):
     if priority:
-        redis_client.rpush(REDIS_PRIORITY_QUEUE_KEY, request_id)
+        pushkey = REDIS_PRIORITY_QUEUE_KEY
     else:
-        redis_client.rpush(REDIS_BACKGROUND_QUEUE_KEY, request_id)
+        pushkey = REDIS_BACKGROUND_QUEUE_KEY
+    redis_client.rpush(pushkey, request_id)
 
 
 def update_status_in_redis(request_id: int, status: Dict[str, str]) -> None:
     redis_client.hmset(str(request_id), status)
 
 
-def upload_file_to_s3(file, file_name):
-    s3_client.put_object(Bucket=S3_BUCKET_NAME, Key=file_name, Body=file)
-    return f"https://{S3_BUCKET_NAME}.s3.{AWS_REGION}.amazonaws.com/{file_name}"
+def upload_file_to_s3(file, file_name, bucket: Optional[str] = None):
+    if bucket is None:
+        bucket = S3_BUCKET_NAME
+    s3_client.put_object(Bucket=bucket, Key=file_name, Body=file)
+    return generate_s3_uri(file_name=file_name, bucket=bucket)
+
+
+def generate_s3_uri(
+    file_name: str, bucket: Optional[str] = None, s3_endpoint: Optional[str] = None
+) -> str:
+    if s3_endpoint is None:
+        s3_endpoint = S3_ENDPOINT_URL
+
+    if bucket is None:
+        bucket = S3_BUCKET_NAME
+
+    # Remove any trailing slashes from the S3 endpoint
+    s3_endpoint = s3_endpoint.rstrip("/")
+
+    # Extract the base endpoint (e.g., sfo3.digitaloceanspaces.com)
+    base_endpoint = s3_endpoint.split("//")[-1]
+
+    # Construct the S3 URI
+    s3_uri = f"https://{bucket}.{base_endpoint}/{file_name}"
+
+    return s3_uri
 
 
 class PDFProcessor(Controller):
-    @post(path="/api/v1/marker")
-    async def process_pdf_upload(
-        self,
-        data: Annotated[UploadFile, Body(media_type=RequestEncodingType.MULTI_PART)],
-        priority: bool = True,
-    ) -> dict:
-        file = data.file
-        request_id = random.randint(100000, 999999)
-        s3_file_name = f"{request_id}.pdf"
-
-        # Upload file to S3
-        s3_url = upload_file_to_s3(file.file.read(), s3_file_name)
-
+    async def marker_raw(self, s3_url: str, request_id: int, priority: bool) -> dict:
         # Update Redis with status and S3 URL
         update_status_in_redis(
             request_id,
@@ -129,6 +146,35 @@ class PDFProcessor(Controller):
             "request_check_url_leaf": f"/api/v1/marker/{request_id}",
             "priority": str(priority),
         }
+
+    @post(path="/api/v1/marker/direct_s3_url_upload")
+    async def process_pdf_s3_direct(
+        self,
+        data: Annotated[UploadFile, Body(media_type=RequestEncodingType.MULTI_PART)],
+        priority: bool = True,
+    ) -> dict:
+        file = data.file
+        request_id = random.randint(100000, 999999)
+        s3_file_name = f"{request_id}.pdf"
+        # TODO: Add validation to see if the file exists and you can actually access the server
+
+        # Upload file to S3
+        s3_url = upload_file_to_s3(file.file.read(), s3_file_name)
+        return await self.marker_raw(
+            s3_url=s3_url, request_id=request_id, priority=priority
+        )
+
+    @post(path="/api/v1/marker")
+    async def process_pdf_upload(
+        self,
+        data: S3URLUpload,
+        priority: bool = True,
+    ) -> dict:
+        s3_url = data.s3_url
+        request_id = random.randint(100000, 999999)
+        return await self.marker_raw(
+            s3_url=s3_url, request_id=request_id, priority=priority
+        )
 
     @get(path="/api/v1/marker/{request_id:int}")
     async def get_request_status(

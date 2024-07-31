@@ -1,6 +1,7 @@
 import os
 
 from requests.api import request
+from requests.exceptions import InvalidURL
 import pypdfium2  # Needs to be at the top to avoid warnings
 import argparse
 import torch.multiprocessing as mp
@@ -202,7 +203,7 @@ import threading
 
 from pathlib import Path
 from pydantic import BaseModel
-from typing import Optional, Annotated, Any, Dict
+from typing import Optional, Annotated, Any, Dict, Tuple
 import logging
 
 
@@ -261,20 +262,22 @@ REDIS_PRIORITY_QUEUE_KEY = os.getenv(
     "REDIS_PRIORITY_QUEUE_KEY", "request_queue_priority"
 )
 REDIS_S3_URLS_KEY = os.getenv("REDIS_S3_URLS_KEY", "request_s3_urls")
-S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
 
-AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
-AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
-AWS_REGION = os.getenv("AWS_REGION")
+S3_ACCESS_KEY_ID = os.getenv("S3_ACCESS_KEY_ID")
+S3_SECRET_ACCESS_KEY = os.getenv("S3_SECRET_ACCESS_KEY")
+S3_REGION = os.getenv("S3_REGION")
+S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL")
 
 s3_client = boto3.client(
     "s3",
-    aws_access_key_id=AWS_ACCESS_KEY_ID,
-    aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
-    region_name=AWS_REGION,
+    endpoint_url=S3_ENDPOINT_URL,
+    aws_access_key_id=S3_ACCESS_KEY_ID,
+    aws_secret_access_key=S3_SECRET_ACCESS_KEY,
+    region_name=S3_REGION,
 )
 
 redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+from urllib.parse import urlparse
 
 
 def update_status_in_redis(request_id: int, status: Dict[str, str]) -> None:
@@ -282,28 +285,46 @@ def update_status_in_redis(request_id: int, status: Dict[str, str]) -> None:
 
 
 def pop_from_queue() -> Optional[int]:
+    # TODO : Clean up code logic
     request_id = redis_client.lpop(REDIS_PRIORITY_QUEUE_KEY)
+    if request_id is None:
+        request_id = redis_client.lpop(REDIS_BACKGROUND_QUEUE_KEY)
+    if request_id is None:
+        return None
     if isinstance(request_id, int):
         return request_id
     if isinstance(request_id, str):
         return int(request_id)
-    if request_id is None:
-        request_id = redis_client.lpop(REDIS_BACKGROUND_QUEUE_KEY)
-        if isinstance(request_id, int):
-            return request_id
-        if isinstance(request_id, str):
-            return int(request_id)
-        if request_id is None:
-            return None
     logger.error(type(request_id))
     raise Exception(
         f"Request id is not string or none and is {type(request_id)} instead."
     )
 
 
-def download_file_from_s3(s3_url: str, local_path: Path) -> None:
-    s3_key = s3_url.split(f".s3.{AWS_REGION}.amazonaws.com/")[-1]
-    s3_client.download_file(S3_BUCKET_NAME, s3_key, str(local_path))
+def parse_s3_uri_to_bucket_and_key(s3_uri: str) -> Tuple[str, str]:
+    """
+    Parses an S3 URI and creates a boto3 request.
+
+    Args:
+        s3_uri (str): The S3 URI to parse.
+
+    Returns:
+        dict: A dictionary containing the bucket name and key.
+    """
+    parsed_url = urlparse(s3_uri)
+
+    # Extract the bucket name from the hostname
+    bucket_name = parsed_url.hostname.split(".")[0]
+
+    # Extract the key from the path
+    key = parsed_url.path.lstrip("/")
+
+    return (bucket_name, key)
+
+
+def download_file_from_s3_url(s3_url: str, local_path: Path) -> None:
+    s3_bucket, s3_key = parse_s3_uri_to_bucket_and_key(s3_url)
+    s3_client.download_file(s3_bucket, s3_key, str(local_path))
 
 
 def process_pdf_from_s3(request_id: int) -> None:
@@ -314,16 +335,16 @@ def process_pdf_from_s3(request_id: int) -> None:
 
     # Get PDF URL from Redis
     s3_url = redis_client.hget(REDIS_S3_URLS_KEY, str(request_id))
-    if not s3_url:
+    if s3_url is None:
         update_status_in_redis(
             request_id,
             {"status": "error", "success": str(False), "error": "No S3 URL found"},
         )
-        return
+        return None
 
     # Download PDF from S3
     pdf_filename = input_directory / f"{request_id}.pdf"
-    download_file_from_s3(s3_url, pdf_filename)
+    download_file_from_s3_url(s3_url, pdf_filename)
 
     # Now process as normal
     try:
@@ -346,7 +367,7 @@ def process_pdf_from_s3(request_id: int) -> None:
                     "error": "No PDF file found",
                 },
             )
-            return
+            return None
 
         first_pdf_filepath = pdf_list[0]
         chunk_paths = split_large_pdf(first_pdf_filepath)
