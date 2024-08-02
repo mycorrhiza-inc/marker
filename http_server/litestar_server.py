@@ -159,7 +159,7 @@ class PDFProcessor(Controller):
         # TODO: Add validation to see if the file exists and you can actually access the server
 
         # Upload file to S3
-        s3_url = upload_file_to_s3(file.file.read(), s3_file_name)
+        s3_url = upload_file_to_s3(file.read(), s3_file_name)
         return await self.marker_raw(
             s3_url=s3_url, request_id=request_id, priority=priority
         )
