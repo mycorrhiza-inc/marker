@@ -147,8 +147,8 @@ class PDFProcessor(Controller):
             "priority": str(priority),
         }
 
-    @post(path="/api/v1/marker/direct_s3_url_upload")
-    async def process_pdf_s3_direct(
+    @post(path="/api/v1/marker")
+    async def process_pdf_upload(
         self,
         data: Annotated[UploadFile, Body(media_type=RequestEncodingType.MULTI_PART)],
         priority: bool = True,
@@ -164,8 +164,8 @@ class PDFProcessor(Controller):
             s3_url=s3_url, request_id=request_id, priority=priority
         )
 
-    @post(path="/api/v1/marker")
-    async def process_pdf_upload(
+    @post(path="/api/v1/marker/direct_s3_url_upload")
+    async def process_pdf_s3_direct(
         self,
         data: S3URLUpload,
         priority: bool = True,
