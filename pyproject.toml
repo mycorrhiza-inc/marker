@@ -41,6 +41,7 @@ uvicorn = "^0.30.1"
 redis = "^5.0.7"
 pymupdf = "^1.24.9"
 boto3 = "^1.34.149"
+urllib3 = "1.26.19"
 
 [tool.poetry.group.dev.dependencies]
 jupyter = "^1.0.0"
