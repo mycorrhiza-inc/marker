@@ -19,7 +19,7 @@ services:
               capabilities: [gpu]
     env_file:
       - .env
-    command: "poetry run python3 new_server.py"
+    command: "python3 new_server.py"
     restart: always
 
   redis:
