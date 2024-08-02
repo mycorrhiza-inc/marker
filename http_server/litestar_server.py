@@ -31,18 +31,18 @@ REDIS_PRIORITY_QUEUE_KEY = os.getenv(
 REDIS_S3_URLS_KEY = os.getenv("REDIS_S3_URLS_KEY", "request_s3_urls")
 S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
 
-S3_ACCESS_KEY_ID = os.getenv("S3_ACCESS_KEY_ID")
-S3_SECRET_ACCESS_KEY = os.getenv("S3_SECRET_ACCESS_KEY")
+S3_ACCESS_KEY = os.getenv("S3_ACCESS_KEY")
+S3_SECRET_KEY = os.getenv("S3_SECRET_KEY")
 S3_REGION = os.getenv("S3_REGION")
 
-S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL")
+S3_ENDPOINT = os.getenv("S3_ENDPOINT")
 
 for x in [
     S3_BUCKET_NAME,
-    S3_ACCESS_KEY_ID,
-    S3_SECRET_ACCESS_KEY,
+    S3_ACCESS_KEY,
+    S3_SECRET_KEY,
     S3_REGION,
-    S3_ENDPOINT_URL,
+    S3_ENDPOINT,
 ]:
     print("Test")
     print("Test 2")
@@ -52,9 +52,9 @@ for x in [
 
 s3_client = boto3.client(
     "s3",
-    endpoint_url=S3_ENDPOINT_URL,
-    aws_access_key_id=S3_ACCESS_KEY_ID,
-    aws_secret_access_key=S3_SECRET_ACCESS_KEY,
+    endpoint_url=S3_ENDPOINT,
+    aws_access_key_id=S3_ACCESS_KEY,
+    aws_secret_access_key=S3_SECRET_KEY,
     region_name=S3_REGION,
 )
 
@@ -117,7 +117,7 @@ def generate_s3_uri(
     file_name: str, bucket: Optional[str] = None, s3_endpoint: Optional[str] = None
 ) -> str:
     if s3_endpoint is None:
-        s3_endpoint = S3_ENDPOINT_URL
+        s3_endpoint = S3_ENDPOINT
 
     if bucket is None:
         bucket = S3_BUCKET_NAME
