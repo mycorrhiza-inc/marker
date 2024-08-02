@@ -37,6 +37,11 @@ S3_REGION = os.getenv("S3_REGION")
 
 S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL")
 
+for x in [S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_REGION, S3_ENDPOINT_URL]:
+    assert isinstance(x, str)
+    assert x != ""
+    print(x)
+
 s3_client = boto3.client(
     "s3",
     endpoint_url=S3_ENDPOINT_URL,
