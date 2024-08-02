@@ -37,7 +37,15 @@ S3_REGION = os.getenv("S3_REGION")
 
 S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL")
 
-for x in [S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_REGION, S3_ENDPOINT_URL]:
+for x in [
+    S3_BUCKET_NAME,
+    S3_ACCESS_KEY_ID,
+    S3_SECRET_ACCESS_KEY,
+    S3_REGION,
+    S3_ENDPOINT_URL,
+]:
+    print("Test")
+    print("Test 2")
     print(x)
     assert isinstance(x, str)
     assert x != ""

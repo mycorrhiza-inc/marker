@@ -6,7 +6,7 @@ services:
     expose:
       - 2718
     env_file:
-      - .env
+      - ./.env
     command: "python3 litestar_server.py"
   marker:
     build: .
@@ -18,7 +18,7 @@ services:
               device_ids: ["0"]
               capabilities: [gpu]
     env_file:
-      - .env
+      - ./.env
     command: "python3 new_server.py"
     restart: always
 
