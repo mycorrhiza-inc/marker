@@ -344,7 +344,21 @@ def process_pdf_from_s3(request_id: int) -> None:
 
     # Download PDF from S3
     pdf_filename = input_directory / f"{request_id}.pdf"
-    download_file_from_s3_url(s3_url, pdf_filename)
+    try:
+        download_file_from_s3_url(s3_url, pdf_filename)
+    except Exception as e:
+        logger.error(
+            f"Encountered error while processing {request_id} in getting file from s3"
+        )
+        logger.error(e)
+        update_status_in_redis(
+            request_id,
+            {
+                "status": "error",
+                "success": str(False),
+                "error": "Error in retreiving file from s3: " + str(e),
+            },
+        )
 
     # Now process as normal
     try:
@@ -395,10 +409,15 @@ def process_pdf_from_s3(request_id: int) -> None:
             {"status": "complete", "success": str(True), "markdown": full_markdown},
         )
     except Exception as e:
-        logger.error(f"Encountered error while processing {request_id}")
+        logger.error(f"Encountered error while processing {request_id} in pdf stage")
         logger.error(e)
         update_status_in_redis(
-            request_id, {"status": "error", "success": str(False), "error": str(e)}
+            request_id,
+            {
+                "status": "error",
+                "success": str(False),
+                "error": "Error in pdf processing stage: " + str(e),
+            },
         )
     finally:
         shutil.rmtree(doc_dir)
