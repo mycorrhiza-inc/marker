@@ -7,6 +7,8 @@ services:
       - 2718
     env_file:
       - ./.env
+    environment:
+      - REDIS_HOST = valkey
     command: "python3 litestar_server.py"
   marker:
     build: .
@@ -19,14 +21,18 @@ services:
               capabilities: [gpu]
     env_file:
       - ./.env
+    environment:
+      - REDIS_HOST = valkey
     command: "python3 new_server.py"
     restart: always
 
-  redis:
-    image: "redis:alpine"
+  valkey:
+    container_name: valkey
+    hostname: valkey
+    image: valkey/valkey:7.2.5
     expose:
       - 6379
     ports:
       - "6379:6379"
     volumes:
-      - ./volumes/redis-data:/data
+      - ./volumes/valkey-data:/data
