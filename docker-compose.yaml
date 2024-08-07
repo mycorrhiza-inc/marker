@@ -1,4 +1,15 @@
 services:
+  http-server:
+    build: ./http_server/
+    ports:
+      - 2718:2718
+    expose:
+      - 2718
+    env_file:
+      - ./.env
+    environment:
+      - REDIS_HOST = valkey
+    command: "python3 litestar_server.py"
   marker:
     build: .
     deploy:
@@ -8,24 +19,19 @@ services:
             - driver: nvidia
               device_ids: ["0"]
               capabilities: [gpu]
+    env_file:
+      - ./.env
     environment:
-      - MARKER_PORT=2718
-      - REDIS_HOST=redis
-    ports:
-      - 2718:2718
-    expose:
-      - 2718
-    volumes:
-      - "./volumes/in:/app/in"
-      - "./volumes/out:/app/out"
-    command: "poetry run python3 new_server.py"
+      - REDIS_HOST = valkey
+    command: "python3 new_server.py"
     restart: always
 
-  redis:
-    image: "redis:alpine"
+  valkey:
+    hostname: valkey
+    image: valkey/valkey:7.2.5
     expose:
       - 6379
     ports:
       - "6379:6379"
     volumes:
-      - ./volumes/redis-data:/data
+      - ./volumes/valkey-data:/data

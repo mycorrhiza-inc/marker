@@ -1,6 +1,7 @@
 import os
 
 from requests.api import request
+from requests.exceptions import InvalidURL
 import pypdfium2  # Needs to be at the top to avoid warnings
 import argparse
 import torch.multiprocessing as mp
@@ -112,6 +113,7 @@ def process_single_pdf(
     except Exception as e:
         print(f"Error converting {filepath}: {e}")
         print(traceback.format_exc())
+        raise e
 
 
 def process_pdfs_core_server(
@@ -186,39 +188,32 @@ def shutdown():
 #     init_models_and_workers,
 #     process_single_pdf,
 #     shutdown,
+#
 # )
-import base64
-import secrets
+#
+
+# GPU / Marker Server Code Snippet
 import os
-import signal
 import shutil
-import sys
 import traceback
-import asyncio
 import time
-import random
 import redis
+import boto3
 import threading
 
 from pathlib import Path
 from pydantic import BaseModel
-from typing import Optional, Annotated, Any, Dict
-from litestar import MediaType, Request, Litestar, Controller, Response, post, get
-from litestar.datastructures import UploadFile
-from litestar.enums import RequestEncodingType
-from litestar.params import Body
-from litestar.params import Parameter
-from litestar.status_codes import HTTP_500_INTERNAL_SERVER_ERROR
-import requests
-import uvicorn
+from typing import Optional, Annotated, Any, Dict, Tuple
 import logging
 
 
+import pymupdf  # PyMuPDF
+import numpy as np
+
+import sys
+
 logger = logging.getLogger(__name__)
-
-
-def rand_string() -> str:
-    return base64.urlsafe_b64encode(secrets.token_bytes(8)).decode()
+logging.basicConfig(level=logging.DEBUG, stream=sys.stderr)
 
 
 class BaseMarkerCliInput(BaseModel):
@@ -259,63 +254,114 @@ class RequestStatus(BaseModel):
 
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = 6379
-REDIS_STATUS_KEY = "request_status"
-REDIS_BACKGROUND_QUEUE_KEY = "request_queue_background"
-REDIS_PRIORITY_QUEUE_KEY = "request_queue_priority"
+REDIS_STATUS_KEY = os.getenv("REDIS_STATUS_KEY", "request_status")
+REDIS_BACKGROUND_QUEUE_KEY = os.getenv(
+    "REDIS_BACKGROUND_QUEUE_KEY", "request_queue_background"
+)
+REDIS_PRIORITY_QUEUE_KEY = os.getenv(
+    "REDIS_PRIORITY_QUEUE_KEY", "request_queue_priority"
+)
+REDIS_S3_URLS_KEY = os.getenv("REDIS_S3_URLS_KEY", "request_s3_urls")
+
+S3_ACCESS_KEY = os.getenv("S3_ACCESS_KEY")
+S3_SECRET_KEY = os.getenv("S3_SECRET_KEY")
+S3_REGION = os.getenv("S3_REGION")
+S3_ENDPOINT = os.getenv("S3_ENDPOINT")
+
+s3_client = boto3.client(
+    "s3",
+    endpoint_url=S3_ENDPOINT,
+    aws_access_key_id=S3_ACCESS_KEY,
+    aws_secret_access_key=S3_SECRET_KEY,
+    region_name=S3_REGION,
+)
 
 redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+from urllib.parse import urlparse
 
 
 def update_status_in_redis(request_id: int, status: Dict[str, str]) -> None:
-    test = redis_client.hmset(str(request_id), status)
+    redis_client.hmset(str(request_id), status)
 
 
-def get_status_from_redis(request_id: int) -> dict:
-    status = redis_client.hgetall(str(request_id))
-    if status is None:
-        return {"status": "not_found", "success": str(False)}
-    logger.info(type(status))
-    return status
-
-
-def push_to_queue(request_id: int, priority: bool):
-    if priority:
-        redis_client.rpush(REDIS_BACKGROUND_QUEUE_KEY, request_id)
-    else:
-        redis_client.rpush(REDIS_PRIORITY_QUEUE_KEY, request_id)
-
-
-# Clean up definition stuff at some point
 def pop_from_queue() -> Optional[int]:
+    # TODO : Clean up code logic
     request_id = redis_client.lpop(REDIS_PRIORITY_QUEUE_KEY)
+    if request_id is None:
+        request_id = redis_client.lpop(REDIS_BACKGROUND_QUEUE_KEY)
+    if request_id is None:
+        return None
     if isinstance(request_id, int):
         return request_id
     if isinstance(request_id, str):
         return int(request_id)
-    if request_id is None:
-        request_id = redis_client.lpop(REDIS_BACKGROUND_QUEUE_KEY)
-        if isinstance(request_id, int):
-            return request_id
-        if isinstance(request_id, str):
-            return int(request_id)
-        if request_id is None:
-            return None
     logger.error(type(request_id))
     raise Exception(
         f"Request id is not string or none and is {type(request_id)} instead."
     )
 
 
-async def run_background_process(request_id: int, priority: bool):
-    push_to_queue(request_id, priority)
+def parse_s3_uri_to_bucket_and_key(s3_uri: str) -> Tuple[str, str]:
+    """
+    Parses an S3 URI and creates a boto3 request.
+
+    Args:
+        s3_uri (str): The S3 URI to parse.
+
+    Returns:
+        dict: A dictionary containing the bucket name and key.
+    """
+    parsed_url = urlparse(s3_uri)
+
+    # Extract the bucket name from the hostname
+    bucket_name = parsed_url.hostname.split(".")[0]
+
+    # Extract the key from the path
+    key = parsed_url.path.lstrip("/")
+
+    return (bucket_name, key)
 
 
-def process_pdf_from_given_docdir(request_id: int) -> None:
+def download_file_from_s3_url(s3_url: str, local_path: Path) -> None:
+    s3_bucket, s3_key = parse_s3_uri_to_bucket_and_key(s3_url)
+    s3_client.download_file(s3_bucket, s3_key, str(local_path))
+
+
+def process_pdf_from_s3(request_id: int) -> None:
     doc_dir = MARKER_TMP_DIR / Path(str(request_id))
+    os.makedirs(doc_dir / Path("in"), exist_ok=True)
+    input_directory = doc_dir / Path("in")
+    output_directory = doc_dir / Path("out")
+
+    # Get PDF URL from Redis
+    s3_url = redis_client.hget(REDIS_S3_URLS_KEY, str(request_id))
+    if s3_url is None:
+        update_status_in_redis(
+            request_id,
+            {"status": "error", "success": str(False), "error": "No S3 URL found"},
+        )
+        return None
+
+    # Download PDF from S3
+    pdf_filename = input_directory / f"{request_id}.pdf"
     try:
-        input_directory = doc_dir / Path("in")
-        output_directory = doc_dir / Path("out")
-        os.makedirs(input_directory, exist_ok=True)
+        download_file_from_s3_url(s3_url, pdf_filename)
+    except Exception as e:
+        logger.error(
+            f"Encountered error while processing {request_id} in getting file from s3"
+        )
+        logger.error(e)
+        update_status_in_redis(
+            request_id,
+            {
+                "status": "error",
+                "success": str(False),
+                "error": "Error in retreiving file from s3: " + str(e),
+            },
+        )
+
+    # Now process as normal
+    try:
         os.makedirs(output_directory, exist_ok=True)
 
         def get_pdf_files(pdf_path: Path) -> list[Path]:
@@ -325,128 +371,110 @@ def process_pdf_from_given_docdir(request_id: int) -> None:
 
         pdf_list = get_pdf_files(input_directory)
         if len(pdf_list) == 0:
-            update_status_in_redis(
-                request_id,
-                {"status": "error", "success": False, "error": "No PDF files found"},
-            )
-            return
-
-        first_pdf_filepath = pdf_list[0]
-        process_single_pdf(first_pdf_filepath, output_directory)
-
-        def pdf_to_md_path(pdf_path: Path) -> Path:
-            return (pdf_path.parent).parent / Path(
-                f"out/{pdf_path.stem}/{pdf_path.stem}.md"
-            )
-
-        output_filename = pdf_to_md_path(first_pdf_filepath)
-        if not os.path.exists(output_filename):
+            logger.error(f"Encountered error while processing {request_id}")
+            logger.error("No PDF File Found.")
             update_status_in_redis(
                 request_id,
                 {
                     "status": "error",
                     "success": str(False),
-                    "error": f"Output markdown file not found at : {output_filename}",
+                    "error": "No PDF file found",
                 },
             )
-            return
+            return None
 
-        with open(output_filename, "r") as f:
-            markdown_content = f.read()
+        first_pdf_filepath = pdf_list[0]
+        chunk_paths = split_large_pdf(first_pdf_filepath)
+
+        full_markdown = ""
+        for chunk_path in chunk_paths:
+            process_single_pdf(chunk_path, output_directory)
+            chunk_markdown_path = pdf_to_md_path(chunk_path)
+            if not os.path.exists(chunk_markdown_path):
+                update_status_in_redis(
+                    request_id,
+                    {
+                        "status": "error",
+                        "success": str(False),
+                        "error": f"Output markdown file not found at : {chunk_markdown_path}",
+                    },
+                )
+                return
+
+            with open(chunk_markdown_path, "r") as f:
+                full_markdown += f.read()
 
         update_status_in_redis(
             request_id,
-            {"status": "complete", "success": str(True), "markdown": markdown_content},
+            {"status": "complete", "success": str(True), "markdown": full_markdown},
         )
     except Exception as e:
+        logger.error(f"Encountered error while processing {request_id} in pdf stage")
+        logger.error(e)
         update_status_in_redis(
-            request_id, {"status": "error", "success": str(False), "error": str(e)}
+            request_id,
+            {
+                "status": "error",
+                "success": str(False),
+                "error": "Error in pdf processing stage: " + str(e),
+            },
         )
     finally:
         shutil.rmtree(doc_dir)
 
 
-class PDFProcessor(Controller):
-    @post(path="/api/v1/marker")
-    async def process_pdf_upload(
-        self,
-        data: Annotated[UploadFile, Body(media_type=RequestEncodingType.MULTI_PART)],
-        priority: bool = True,
-    ) -> dict:
-        file = data.file
-        request_id = random.randint(100000, 999999)
-        doc_dir = MARKER_TMP_DIR / Path(str(request_id))
-        os.makedirs(doc_dir / Path("in"), exist_ok=True)
-        pdf_filename = doc_dir / Path("in") / Path(f"{request_id}.pdf")
+def split_large_pdf(pdf_path: Path, max_pages: int = 300) -> list[Path]:
+    logger.info("Splitting large pdf.")
+    doc = pymupdf.open(pdf_path)
+    num_pages = doc.page_count
+    chunk_paths = []
 
-        with open(pdf_filename, "wb") as f:
-            f.write(file.read())
+    if num_pages <= max_pages:
+        return [pdf_path]
 
-        update_status_in_redis(
-            request_id,
-            {
-                "status": "processing",
-                "success": str(True),
-                "request_id": str(request_id),
-                "request_check_url": f"https://marker.kessler.xyz/api/v1/marker/{request_id}",
-                "request_check_url_leaf": f"/api/v1/marker/{request_id}",
-                "priority": str(priority),
-            },
-        )
-        await run_background_process(request_id, priority)
+    base_path = pdf_path.parent / Path("chunks")
+    os.makedirs(base_path, exist_ok=True)
 
-        return {
-            "success": True,
-            "error": "None",
-            "request_id": str(request_id),
-            "request_check_url": f"https://marker.kessler.xyz/api/v1/marker/{request_id}",
-            "request_check_url_leaf": f"/api/v1/marker/{request_id}",
-            "priority": str(priority),
-        }
+    split_ranges = np.array_split(range(num_pages), np.ceil(num_pages / max_pages))
 
-    @get(path="/api/v1/marker/{request_id:int}")
-    async def get_request_status(
-        self,
-        request_id: int = Parameter(
-            title="Request ID", description="Request id to retieve"
-        ),
-    ) -> dict:
-        return get_status_from_redis(request_id)
+    for idx, page_range in enumerate(split_ranges):
+        chunk_path = base_path / f"{pdf_path.stem}_chunk{idx + 1}.pdf"
+        chunk_doc = pymupdf.open()
+
+        for page_num in page_range:
+            chunk_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
+
+        chunk_doc.save(chunk_path)
+        chunk_doc.close()
+        chunk_paths.append(chunk_path)
+
+    doc.close()
+    return chunk_paths
 
 
-def plain_text_exception_handler(request: Request, exc: Exception) -> Response:
-    tb = traceback.format_exc()
-    status_code = getattr(exc, "status_code", HTTP_500_INTERNAL_SERVER_ERROR)
-    return Response(media_type=MediaType.TEXT, content=tb, status_code=status_code)
+def pdf_to_md_path(pdf_path: Path) -> Path:
+    return (pdf_path.parent).parent / Path(f"out/{pdf_path.stem}/{pdf_path.stem}.md")
 
 
 def background_worker():
+    print("Starting Background Worker", file=sys.stderr)
     while True:
         request_id = pop_from_queue()
         if request_id is not None:
-            process_pdf_from_given_docdir(request_id)
+            print(
+                f"Beginning to Process pdf with request: {request_id}", file=sys.stderr
+            )
+            process_pdf_from_s3(request_id)
         else:
             time.sleep(1)
 
 
 def start_server():
+    print("Test output to stdout")
+    print("Test output to stderr", file=sys.stderr)
+    logger.info("Initializing models and workers.")
     init_models_and_workers(workers=5)
-    # port = os.environ.get("MARKER_PORT", 2718)
-    port = 2718
-    app = Litestar(
-        route_handlers=[PDFProcessor],
-        exception_handlers={Exception: plain_text_exception_handler},
-    )
-    run_config = uvicorn.Config(app, port=port, host="0.0.0.0")
-    server = uvicorn.Server(run_config)
-    signal.signal(signal.SIGINT, lambda s, f: shutdown())
-
-    # Start background worker in a separate thread
-    worker_thread = threading.Thread(target=background_worker)
-    worker_thread.start()
-
-    server.run()
-    shutdown()
+    background_worker()
 
 
 if __name__ == "__main__":

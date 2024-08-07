@@ -49,24 +49,27 @@ RUN apt-get update && apt-get install -y \
 
 # Update PyTorch (adjust this part based on GPU/CPU requirements)
 RUN pip install --upgrade pip
-### GPU Only
-RUN pip install torch 
+COPY ./requirements.txt .
 
-COPY ./pyproject.toml . 
-COPY ./poetry.lock .
-
-# Install Python dependencies
-RUN pip install poetry
-RUN poetry install
+RUN pip install --no-cache -r requirements.txt 
+# ### GPU Only
+# RUN pip install torch 
+# 
+# 
+# COPY ./pyproject.toml . 
+# COPY ./poetry.lock .
+# # Install Python dependencies
+# RUN pip install poetry
+# RUN poetry install
 
 ## ====
 ### CPU Only
 # RUN poetry remove torch
 # RUN pip install --no-cache-dir --no-warn-script-location torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 ## ====
-RUN pip install --no-cache-dir --no-warn-script-location scikit-learn Pillow pydantic pydantic-settings transformers numpy python-dotenv \
-  torch ray tqdm tabulate ftfy texify rapidfuzz surya-ocr \
-  filetype regex pdftext grpcio 
+# RUN pip install --no-cache-dir --no-warn-script-location scikit-learn Pillow pydantic pydantic-settings transformers numpy python-dotenv \
+#   torch ray tqdm tabulate ftfy texify rapidfuzz surya-ocr \
+#  filetype regex pdftext grpcio 
 
 RUN pip install opencv-python-headless
 

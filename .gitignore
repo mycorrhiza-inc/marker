@@ -1,5 +1,4 @@
-volumes/
-
+.env
 
 private.py
 .DS_Store
