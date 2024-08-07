@@ -204,6 +204,9 @@ class PDFProcessor(Controller):
     ) -> str:
         redis_client.ltrim(REDIS_PRIORITY_QUEUE_KEY, 0, 0)
         redis_client.ltrim(REDIS_BACKGROUND_QUEUE_KEY, 0, 0)
+        redis_client.del(REDIS_PRIORITY_QUEUE_KEY)
+        redis_client.del(REDIS_BACKGROUND_QUEUE_KEY)
+
         return "Success"
 
 

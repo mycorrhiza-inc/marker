@@ -1,0 +1,21 @@
+services:
+  http-server:
+    build: ./http_server/
+    ports:
+      - 2718:2718
+    expose:
+      - 2718
+    env_file:
+      - ./.env
+    environment:
+      - REDIS_HOST = valkey
+    command: "python3 litestar_server.py"
+  valkey:
+    hostname: valkey
+    image: valkey/valkey:7.2.5
+    expose:
+      - 6379
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./volumes/valkey-data:/data
