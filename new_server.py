@@ -466,9 +466,6 @@ def background_worker():
             )
             process_pdf_from_s3(request_id)
         else:
-            print(
-                "No new pdf's to process checking again in 1 second.", file=sys.stderr
-            )
             time.sleep(1)
 
 

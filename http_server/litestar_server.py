@@ -198,6 +198,14 @@ class PDFProcessor(Controller):
     ) -> dict:
         return get_status_from_redis(request_id)
 
+    @post(path="/api/v1/marker/dangerous/clear_queue")
+    async def get_request_status(
+        self,
+    ) -> str:
+        redis_client.ltrim(REDIS_PRIORITY_QUEUE_KEY, 0, -1)
+        redis_client.ltrim(REDIS_BACKGROUND_QUEUE_KEY, 0, -1)
+        return "Success"
+
 
 def plain_text_exception_handler(request: Request, exc: Exception) -> Response:
     tb = traceback.format_exc()

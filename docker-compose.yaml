@@ -27,7 +27,6 @@ services:
     restart: always
 
   valkey:
-    container_name: valkey
     hostname: valkey
     image: valkey/valkey:7.2.5
     expose:
