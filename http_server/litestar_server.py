@@ -202,8 +202,8 @@ class PDFProcessor(Controller):
     async def clear_marker_queue(
         self,
     ) -> str:
-        redis_client.ltrim(REDIS_PRIORITY_QUEUE_KEY, 0, -1)
-        redis_client.ltrim(REDIS_BACKGROUND_QUEUE_KEY, 0, -1)
+        redis_client.ltrim(REDIS_PRIORITY_QUEUE_KEY, 0, 0)
+        redis_client.ltrim(REDIS_BACKGROUND_QUEUE_KEY, 0, 0)
         return "Success"
 
 
