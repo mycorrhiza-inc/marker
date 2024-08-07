@@ -199,7 +199,7 @@ class PDFProcessor(Controller):
         return get_status_from_redis(request_id)
 
     @post(path="/api/v1/marker/dangerous/clear_queue")
-    async def get_request_status(
+    async def clear_marker_queue(
         self,
     ) -> str:
         redis_client.ltrim(REDIS_PRIORITY_QUEUE_KEY, 0, -1)
