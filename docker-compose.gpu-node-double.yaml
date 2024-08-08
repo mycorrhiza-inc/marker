@@ -1,0 +1,31 @@
+services:
+  marker-1:
+    build: .
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["0"]
+              capabilities: [gpu]
+    env_file:
+      - ./.env
+    environment:
+      - REDIS_HOST = valkey
+    command: "python3 new_server.py"
+    restart: always
+  marker-2:
+    build: .
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["0"]
+              capabilities: [gpu]
+    env_file:
+      - ./.env
+    environment:
+      - REDIS_HOST = valkey
+    command: "python3 new_server.py"
+    restart: always

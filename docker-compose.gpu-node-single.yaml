@@ -1,5 +1,5 @@
 services:
-  marker:
+  marker-1:
     build: .
     deploy:
       resources:
