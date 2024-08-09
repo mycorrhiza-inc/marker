@@ -1,12 +1,14 @@
 services:
-  marker-1:
+  marker:
     build: .
-    mem_limit: 50gb
-    memswap_limit: 50gb
+    mem_limit: ${MEM_LIMIT:-30gb}
+    memswap_limit: ${MEM_LIMIT:-30gb}
     deploy:
+      mode: replicated
+      replicas: ${REPLICAS:-2}
       resources:
         limits:
-          memory: 50gb
+          memory: ${MEM_LIMIT:-30gb}
         reservations:
           devices:
             - driver: nvidia
