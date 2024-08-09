@@ -1,10 +1,12 @@
 services:
   marker-1:
     build: .
-    mem_limit: 30G
-    memswap_limit: 30G
+    mem_limit: 30gb
+    memswap_limit: 30gb
     deploy:
       resources:
+        limits:
+          memory: 30gb
         reservations:
           devices:
             - driver: nvidia
@@ -16,10 +18,12 @@ services:
     restart: always
   marker-2:
     build: .
-    mem_limit: 30G
-    memswap_limit: 30G
+    mem_limit: 30gb
+    memswap_limit: 30gb
     deploy:
       resources:
+        limits:
+          memory: 30gb
         reservations:
           devices:
             - driver: nvidia
