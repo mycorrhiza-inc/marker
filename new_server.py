@@ -424,7 +424,7 @@ def process_pdf_from_s3(request_id: int) -> None:
 
 
 def split_large_pdf(pdf_path: Path, max_pages: int = 300) -> list[Path]:
-    logger.info("Splitting large pdf.")
+    print("Splitting large pdf.")
     doc = pymupdf.open(pdf_path)
     num_pages = doc.page_count
     chunk_paths = []
