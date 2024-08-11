@@ -213,7 +213,7 @@ import numpy as np
 import sys
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG, stream=sys.stderr)
+logging.basicConfig(level=logging.INFO, stream=sys.stderr)
 
 
 class BaseMarkerCliInput(BaseModel):
@@ -359,6 +359,7 @@ def process_pdf_from_s3(request_id: int) -> None:
                 "error": "Error in retreiving file from s3: " + str(e),
             },
         )
+        return None
 
     # Now process as normal
     try:
@@ -399,7 +400,7 @@ def process_pdf_from_s3(request_id: int) -> None:
                         "error": f"Output markdown file not found at : {chunk_markdown_path}",
                     },
                 )
-                return
+                return None
 
             with open(chunk_markdown_path, "r") as f:
                 full_markdown += f.read()
@@ -419,6 +420,7 @@ def process_pdf_from_s3(request_id: int) -> None:
                 "error": "Error in pdf processing stage: " + str(e),
             },
         )
+        return None
     finally:
         shutil.rmtree(doc_dir)
 
@@ -457,7 +459,6 @@ def pdf_to_md_path(pdf_path: Path) -> Path:
 
 
 def background_worker():
-    print("Starting Background Worker", file=sys.stderr)
     while True:
         request_id = pop_from_queue()
         if request_id is not None:
@@ -470,9 +471,6 @@ def background_worker():
 
 
 def start_server():
-    print("Test output to stdout")
-    print("Test output to stderr", file=sys.stderr)
-    logger.info("Initializing models and workers.")
     init_models_and_workers(workers=5)
     background_worker()
 
