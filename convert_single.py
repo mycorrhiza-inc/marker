@@ -2,6 +2,7 @@ import time
 
 import pypdfium2 # Needs to be at the top to avoid warnings
 import os
+
 os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1" # For some reason, transformers decided to use .isin for a simple op, which is not supported on MPS
 
 import argparse
@@ -20,9 +21,8 @@ def main():
     parser.add_argument("output", help="Output base folder path")
     parser.add_argument("--max_pages", type=int, default=None, help="Maximum number of pages to parse")
     parser.add_argument("--start_page", type=int, default=None, help="Page to start processing at")
-    parser.add_argument("--langs", type=str, help="Languages to use for OCR, comma separated", default=None)
+    parser.add_argument("--langs", type=str, help="Optional languages to use for OCR, comma separated", default=None)
     parser.add_argument("--batch_multiplier", type=int, default=2, help="How much to increase batch sizes")
-    parser.add_argument("--debug", action="store_true", help="Enable debug logging", default=False)
     args = parser.parse_args()
 
     langs = args.langs.split(",") if args.langs else None
@@ -36,8 +36,7 @@ def main():
     subfolder_path = save_markdown(args.output, fname, full_text, images, out_meta)
 
     print(f"Saved markdown to the {subfolder_path} folder")
-    if args.debug:
-        print(f"Total time: {time.time() - start}")
+    print(f"Total time: {time.time() - start}")
 
 
 if __name__ == "__main__":
