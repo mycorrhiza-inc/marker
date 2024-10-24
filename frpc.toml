@@ -1,0 +1,16 @@
+# frpc.toml
+serverAddr = "frps-testing.tail4a273.ts.net"
+serverPort = 7000
+
+# [[proxies]]
+# name = "webserver-insecure"
+# type = "http"
+# localPort = 80
+# customDomains = ["frpmedia.kessler.xyz"]
+
+[[proxies]]
+name = "marker-headserver-secure"
+type = "https"
+localPort = 3443
+# localIP = "reverse-proxy"
+customDomains = ["marker.kessler.xyz"]

@@ -13,6 +13,34 @@ services:
       - "traefik.http.routers.http-server.rule=Host(`${DOMAIN:-marker.kessler.xyz}`) && PathPrefix(`/api`) || PathPrefix(`/schema`)"
       - "traefik.http.routers.http-server.entrypoints=websecure"
       - "traefik.http.routers.http-server.tls.certresolver=myresolver"
+  reverse-proxy:
+    image: traefik:v3.1.2
+    command:
+      # - "--log.level=DEBUG"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entryPoints.websecure.address=:443"
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      # - "--certificatesresolvers.myresolver.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
+      - "--certificatesresolvers.myresolver.acme.email=nvenner@protonmail.ch"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+    expose:
+      - 80
+      - 443
+    ports:
+      - 3443:443
+      - "${PROXY_UI_PORT:-8084}:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - "${VOLUMES_DIRECTORY:-./volumes}/letsencrypt:/letsencrypt"
+  frpc:
+    image: snowdreamtech/frpc:alpine
+    container_name: frpc
+    restart: always
+    network_mode: "host"
+    volumes:
+      - ./frpc.toml:/etc/frp/frpc.toml
   valkey:
     hostname: valkey
     image: valkey/valkey:7.2.5
@@ -22,23 +50,3 @@ services:
       - "6379:6379"
     volumes:
       - ./volumes/valkey-data:/data
-  reverse-proxy:
-    # official image
-    image: traefik:v3.0
-    command:
-      # - "--log.level=DEBUG"
-      - "--api.insecure=true"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entryPoints.websecure.address=:443"
-      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
-      # - "--certificatesresolvers.myresolver.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
-      - "--certificatesresolvers.myresolver.acme.email=mbright@kessler.xyz"
-      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
-    ports:
-      - "80:80"
-      - "443:443"
-      - "${PROXY_UI_PORT:-8083}:8080"
-    volumes:
-      - "${VOLUMES_DIRECTORY:-./volumes}/letsencrypt:/letsencrypt"
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
