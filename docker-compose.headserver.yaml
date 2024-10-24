@@ -36,7 +36,6 @@ services:
       - "${VOLUMES_DIRECTORY:-./volumes}/letsencrypt:/letsencrypt"
   frpc:
     image: snowdreamtech/frpc:alpine
-    container_name: frpc
     restart: always
     network_mode: "host"
     volumes:
