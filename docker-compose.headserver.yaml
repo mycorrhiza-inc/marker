@@ -30,7 +30,7 @@ services:
       - 443
     ports:
       - 3443:443
-      - "${PROXY_UI_PORT:-8084}:8080"
+      - "${PROXY_UI_PORT:-8086}:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - "${VOLUMES_DIRECTORY:-./volumes}/letsencrypt:/letsencrypt"
