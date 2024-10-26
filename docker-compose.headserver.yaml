@@ -12,7 +12,7 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.http-server.rule=Host(`${DOMAIN:-marker.kessler.xyz}`) && PathPrefix(`/api`) || PathPrefix(`/schema`)"
       - "traefik.http.routers.http-server.entrypoints=websecure"
-      - "traefik.http.routers.http-server.tls.certresolver=myresolver"
+      # - "traefik.http.routers.http-server.tls.certresolver=myresolver"
   reverse-proxy:
     image: traefik:v3.1.2
     command:
