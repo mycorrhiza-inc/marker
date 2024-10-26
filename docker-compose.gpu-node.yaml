@@ -5,7 +5,7 @@ services:
     memswap_limit: ${MEM_LIMIT:-30gb}
     deploy:
       mode: replicated
-      replicas: ${REPLICAS:-2}
+      replicas: ${REPLICAS:-1}
       resources:
         limits:
           memory: ${MEM_LIMIT:-30gb}
