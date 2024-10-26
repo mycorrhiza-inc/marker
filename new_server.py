@@ -65,11 +65,11 @@ def init_models_and_workers(workers):
     model_refs = model_lst
 
     total_processes = int(workers)
-    if settings.CUDA:
-        tasks_per_gpu = (
-            settings.INFERENCE_RAM // settings.VRAM_PER_TASK if settings.CUDA else 0
-        )
-        total_processes = int(min(tasks_per_gpu, total_processes))
+    # if settings.CUDA:
+    #     tasks_per_gpu = (
+    #         settings.INFERENCE_RAM // settings.VRAM_PER_TASK if settings.CUDA else 0
+    #     )
+    #     total_processes = int(min(tasks_per_gpu, total_processes))
 
     try:
         mp.set_start_method("spawn")
