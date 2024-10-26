@@ -1,9 +1,9 @@
 import os
 
-from requests.api import request
-from requests.exceptions import InvalidURL
-import pypdfium2  # Needs to be at the top to avoid warnings
-import argparse
+# from requests.api import request
+# from requests.exceptions import InvalidURL
+# import pypdfium2  # Needs to be at the top to avoid warnings
+# import argparse
 import torch.multiprocessing as mp
 from tqdm import tqdm
 import math
@@ -19,6 +19,7 @@ from marker.logger import configure_logging
 
 from typing import Optional
 from pathlib import Path
+import json
 
 try:
     mp.set_start_method("spawn")
