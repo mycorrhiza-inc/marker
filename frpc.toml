@@ -9,8 +9,8 @@ serverPort = 7000
 # customDomains = ["frpmedia.kessler.xyz"]
 
 [[proxies]]
-name = "marker-headserver-secure"
-type = "https"
-localPort = 3443
+name = "marker-headserver-insecure"
+type = "http"
+localPort = 2718
 # localIP = "reverse-proxy"
 customDomains = ["marker.kessler.xyz"]

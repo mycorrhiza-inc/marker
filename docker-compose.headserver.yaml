@@ -14,26 +14,26 @@ services:
       - "traefik.http.routers.http-server.rule= PathPrefix(`/api`) || PathPrefix(`/schema`)"
       - "traefik.http.routers.http-server.entrypoints=websecure"
       # - "traefik.http.routers.http-server.tls.certresolver=myresolver"
-  reverse-proxy:
-    image: traefik:v3.1.2
-    command:
-      # - "--log.level=DEBUG"
-      - "--api.insecure=true"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entryPoints.websecure.address=:443"
-      # - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
-      # - "--certificatesresolvers.myresolver.acme.email=nvenner@protonmail.ch"
-      # - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
-    expose:
-      - 80
-      - 443
-    ports:
-      - 3443:443
-      - "${PROXY_UI_PORT:-8086}:8080"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - "${VOLUMES_DIRECTORY:-./volumes}/letsencrypt:/letsencrypt"
+  # reverse-proxy:
+  #   image: traefik:v3.1.2
+  #   command:
+  #     # - "--log.level=DEBUG"
+  #     - "--api.insecure=true"
+  #     - "--providers.docker=true"
+  #     - "--providers.docker.exposedbydefault=false"
+  #     - "--entryPoints.websecure.address=:443"
+  #     # - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+  #     # - "--certificatesresolvers.myresolver.acme.email=nvenner@protonmail.ch"
+  #     # - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+  #   expose:
+  #     - 80
+  #     - 443
+  #   ports:
+  #     - 3443:443
+  #     - "${PROXY_UI_PORT:-8086}:8080"
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #     - "${VOLUMES_DIRECTORY:-./volumes}/letsencrypt:/letsencrypt"
   frpc:
     image: snowdreamtech/frpc:alpine
     restart: always
