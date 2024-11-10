@@ -143,7 +143,7 @@ class PDFProcessor(Controller):
                 "status": "processing",
                 "success": str(True),
                 "request_id": str(request_id),
-                "request_check_url": f"https://marker.kessler.xyz/api/v1/marker/{request_id}",
+                "request_check_url": f"http://marker.kessler.xyz/api/v1/marker/{request_id}",
                 "request_check_url_leaf": f"/api/v1/marker/{request_id}",
                 "priority": str(priority),
             },
@@ -155,7 +155,7 @@ class PDFProcessor(Controller):
             "success": True,
             "error": "None",
             "request_id": str(request_id),
-            "request_check_url": f"https://marker.kessler.xyz/api/v1/marker/{request_id}",
+            "request_check_url": f"http://marker.kessler.xyz/api/v1/marker/{request_id}",
             "request_check_url_leaf": f"/api/v1/marker/{request_id}",
             "priority": str(priority),
         }
