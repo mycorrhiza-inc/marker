@@ -10,7 +10,7 @@ serverPort = 7000
 
 [[proxies]]
 name = "marker-headserver-insecure"
-type = "http"
-localPort = 2718
+type = "https"
+localPort = 3443
 # localIP = "reverse-proxy"
 customDomains = ["markerbackup.kessler.xyz", "marker.kessler.xyz"]
