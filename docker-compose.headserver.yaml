@@ -12,9 +12,6 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.http-server.rule=Host(`${DOMAIN:-marker.kessler.xyz}`) && PathPrefix(`/api`) || PathPrefix(`/schema`)"
       - "traefik.http.routers.http-server.rule= PathPrefix(`/api`) || PathPrefix(`/schema`)"
-
-      - "traefik.http.routers.blog.tls.domains[0].main=marker.kessler.xyz"
-
       - "traefik.http.routers.whoami.rule=Host(`marker.kessler.xyz`)"
       - "traefik.http.routers.http-server.entrypoints=websecure"
       - "traefik.http.routers.http-server.tls.certresolver=myresolver"
