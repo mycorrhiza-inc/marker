@@ -40,7 +40,7 @@ os.makedirs(UPLOAD_DIRECTORY, exist_ok=True)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app_data["models"] = create_model_dict()
-    initialize_background_workers(3)
+    initialize_background_workers(1)
 
     yield
 

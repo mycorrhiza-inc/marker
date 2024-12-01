@@ -35,14 +35,15 @@ texify = "^0.2.1"
 rapidfuzz = "^3.8.1"
 surya-ocr = "~0.7.0"
 regex = "^2024.4.28"
-redis = "^5.2.0"
-boto3 = "^1.35.49"
-pymupdf = "^1.24.12"
 numpy = "^2.1.2"
 pdftext = "^0.3.19"
 tabled-pdf = "~0.1.5"
 markdownify = "^0.13.1"
 click = "^8.1.7"
+# New Server Editions
+redis = "^5.2.0"
+boto3 = "^1.35.49"
+pymupdf = "^1.24.12"
 
 [tool.poetry.group.dev.dependencies]
 jupyter = "^1.0.0"
