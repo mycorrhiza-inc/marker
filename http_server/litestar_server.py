@@ -9,7 +9,16 @@ import boto3
 from pathlib import Path
 from pydantic import BaseModel
 from typing import Optional, Annotated, Any, Dict
-from litestar import MediaType, Request, Litestar, Controller, Response, post, get
+from litestar import (
+    MediaType,
+    Request,
+    Litestar,
+    Controller,
+    Response,
+    post,
+    get,
+    delete,
+)
 from litestar.datastructures import UploadFile
 from litestar.enums import RequestEncodingType
 from litestar.params import Body, Parameter
@@ -198,7 +207,7 @@ class PDFProcessor(Controller):
     ) -> dict:
         return get_status_from_redis(request_id)
 
-    @post(path="/api/v1/marker/dangerous/clear_queue")
+    @delete(path="/api/v1/marker/dangerous/clear_queue")
     async def clear_marker_queue(
         self,
     ) -> str:
