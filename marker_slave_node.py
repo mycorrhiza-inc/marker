@@ -1,4 +1,3 @@
-from random import random
 import traceback
 
 import click
@@ -28,6 +27,7 @@ import redis
 from urllib.parse import urlparse
 import asyncio
 import sys
+import random
 
 
 app_data = {}
