@@ -193,7 +193,8 @@ S3_ACCESS_KEY = os.getenv("S3_ACCESS_KEY")
 S3_SECRET_KEY = os.getenv("S3_SECRET_KEY")
 S3_REGION = os.getenv("S3_REGION")
 S3_ENDPOINT = os.getenv("S3_ENDPOINT")
-PROCESSES_PER_CONTAINER = int(os.getenv("PROCESSES_PER_CONTAINER", "1"))
+TASKS_PER_CONTAINER = int(os.getenv("TASKS_PER_CONTAINER", "-1"))
+assert TASKS_PER_CONTAINER > 0, "Tasks per container must be > 0 and defined in .env"
 
 s3_client = boto3.client(
     "s3",
@@ -376,7 +377,7 @@ async def background_worker():
 
 def initialize_background_workers(num_workers: Optional[int] = None):
     if num_workers is None:
-        num_workers = PROCESSES_PER_CONTAINER
+        num_workers = TASKS_PER_CONTAINER
     for _ in range(num_workers):
         asyncio.create_task(background_worker())
 
