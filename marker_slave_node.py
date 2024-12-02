@@ -105,6 +105,7 @@ class CommonParams(BaseModel):
 
 async def _convert_pdf(params: CommonParams):
     assert params.output_format in ["markdown", "json", "html"], "Invalid output format"
+    assert params.filepath is not None, "Encountered an empty filepath"
     try:
         options = params.model_dump()
         print(options)
@@ -117,6 +118,7 @@ async def _convert_pdf(params: CommonParams):
             processor_list=config_parser.get_processors(),
             renderer=config_parser.get_renderer(),
         )
+        print("Rendering filepath :", params.filepath)
         rendered = converter(params.filepath)
         text, _, images = text_from_rendered(rendered)
         metadata = rendered.metadata
@@ -274,14 +276,12 @@ def parse_s3_uri_to_bucket_and_key(s3_uri: str) -> Tuple[str, str]:
     return (bucket_name, key)
 
 
-async def download_file_from_s3_url(s3_url: str, local_path: Path) -> None:
+def download_file_from_s3_url(s3_url: str, local_path: Path) -> None:
     s3_bucket, s3_key = parse_s3_uri_to_bucket_and_key(s3_url)
-
-    def run_download():
-        s3_client.download_file(s3_bucket, s3_key, str(local_path))
-
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, run_download)
+    # If you want to make this async use the async boto implementation
+    # Doing it on a seperate thread as async might be causing some new
+    # issues with unparsable pdfs
+    s3_client.download_file(s3_bucket, s3_key, str(local_path))
 
 
 async def process_pdf_from_s3(request_id: int) -> None:
@@ -306,7 +306,7 @@ async def process_pdf_from_s3(request_id: int) -> None:
     # Download PDF from S3
     pdf_filename = input_directory / f"{request_id}.pdf"
     try:
-        await download_file_from_s3_url(s3_url, pdf_filename)
+        download_file_from_s3_url(s3_url, pdf_filename)
     except Exception as e:
         logger.error(
             f"Encountered error while processing {request_id} in getting file from s3"
