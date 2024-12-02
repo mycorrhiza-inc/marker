@@ -106,6 +106,7 @@ class CommonParams(BaseModel):
 async def _convert_pdf(params: CommonParams):
     assert params.output_format in ["markdown", "json", "html"], "Invalid output format"
     assert params.filepath is not None, "Encountered an empty filepath"
+    assert os.path.exists(params.filepath), "Filepath does not exist"
     try:
         options = params.model_dump()
         print(options)
@@ -232,7 +233,7 @@ def get_status_from_redis(request_id: int) -> RequestStatus:
 
 
 def set_status_in_redis(request_id: int, status: RequestStatus) -> None:
-    status_dict = status.dict()
+    status_dict = status.model_dump()
     redis_client.hmset(str(request_id), status_dict)
 
 
