@@ -309,10 +309,10 @@ async def process_pdf_from_s3(request_id: int) -> None:
     #
     #
     params = CommonParams(
-        filepath=pdf_filename,
+        filepath=str(pdf_filename),
         page_range=None,
         languages=None,
-        force_ocr=None,
+        force_ocr=False,
         paginate_output=True,
         output_format="markdown",
     )
@@ -344,6 +344,7 @@ def pdf_to_md_path(pdf_path: Path) -> Path:
 async def background_worker():
     rand_seconds = random.randint(0, 10)
     await asyncio.sleep(rand_seconds)
+    print("Background worker started", file=sys.stderr)
     while True:
         request_id = pop_from_queue()
         if request_id is not None:
@@ -352,7 +353,7 @@ async def background_worker():
             )
             await process_pdf_from_s3(request_id)
         else:
-            print("No request found", file=sys.stderr)
+            # print("No request found", file=sys.stderr)
             await asyncio.sleep(5)
 
 
