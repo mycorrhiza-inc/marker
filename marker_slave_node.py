@@ -28,6 +28,7 @@ from urllib.parse import urlparse
 import asyncio
 import sys
 import random
+import json
 
 
 app_data = {}
@@ -214,9 +215,9 @@ class RequestStatus(BaseModel):
     request_id: str
     request_check_url: str
     request_check_url_leaf: str
-    markdown: Optional[str] = None
-    error: Optional[str] = None
-    images: Optional[Any] = None
+    markdown: str = ""
+    error: str = ""
+    images: str = ""
 
 
 def get_status_from_redis(request_id: int) -> RequestStatus:
@@ -344,7 +345,7 @@ async def process_pdf_from_s3(request_id: int) -> None:
         )
     else:
         status.markdown = results["output"]
-        status.images = results["images"]
+        status.images = json.dumps(results["images"])
         status.status = "complete"
         status.success = str(True)
         set_status_in_redis(
