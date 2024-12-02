@@ -12,7 +12,7 @@ from marker.output import text_from_rendered
 
 import base64
 from contextlib import asynccontextmanager
-from typing import Optional, Annotated
+from typing import Any, Optional, Annotated
 import io
 
 from fastapi import FastAPI, Form, File, UploadFile
@@ -214,10 +214,21 @@ class RequestStatus(BaseModel):
     request_check_url_leaf: str
     markdown: Optional[str] = None
     error: Optional[str] = None
+    images: Optional[Any] = None
 
 
-def update_status_in_redis(request_id: int, status: Dict[str, str]) -> None:
-    redis_client.hmset(str(request_id), status)
+def get_status_from_redis(request_id: int) -> RequestStatus:
+    raw_dict = redis_client.hgetall(str(request_id))
+    try:
+        status = RequestStatus(**raw_dict)
+        return status
+    except Exception as e:
+        raise e
+
+
+def set_status_in_redis(request_id: int, status: RequestStatus) -> None:
+    status_dict = status.dict()
+    redis_client.hmset(str(request_id), status_dict)
 
 
 def pop_from_queue() -> Optional[int]:
@@ -277,11 +288,15 @@ async def process_pdf_from_s3(request_id: int) -> None:
     output_directory = doc_dir / Path("out")
 
     # Get PDF URL from Redis
+    status = get_status_from_redis(request_id)
     s3_url = str(redis_client.hget(REDIS_S3_URLS_KEY, str(request_id)))
     if s3_url is None:
-        update_status_in_redis(
+        status.status = "error"
+        status.success = str(False)
+        status.error = "No S3 URL found"
+        set_status_in_redis(
             request_id,
-            {"status": "error", "success": str(False), "error": "No S3 URL found"},
+            status,
         )
         return None
 
@@ -294,13 +309,12 @@ async def process_pdf_from_s3(request_id: int) -> None:
             f"Encountered error while processing {request_id} in getting file from s3"
         )
         logger.error(e)
-        update_status_in_redis(
+        status.status = "error"
+        status.success = str(False)
+        status.error = "Error in retreiving file from s3: " + str(e)
+        set_status_in_redis(
             request_id,
-            {
-                "status": "error",
-                "success": str(False),
-                "error": "Error in retreiving file from s3: " + str(e),
-            },
+            status,
         )
         return None
 
@@ -319,19 +333,21 @@ async def process_pdf_from_s3(request_id: int) -> None:
     try:
         results = await _convert_pdf(params)
     except Exception as e:
-        update_status_in_redis(
+        status.status = "error"
+        status.success = str(False)
+        status.error = "Error in processing pdf: " + str(e)
+        set_status_in_redis(
             request_id,
-            {
-                "status": "error",
-                "success": str(False),
-                "error": "Error in processing pdf: " + str(e),
-            },
+            status,
         )
     else:
-        text = results["output"]
-        update_status_in_redis(
+        status.markdown = results["output"]
+        status.images = results["images"]
+        status.status = "complete"
+        status.success = str(True)
+        set_status_in_redis(
             request_id,
-            {"status": "complete", "success": str(True), "markdown": text},
+            status,
         )
     finally:
         os.remove(pdf_filename)
@@ -342,7 +358,7 @@ def pdf_to_md_path(pdf_path: Path) -> Path:
 
 
 async def background_worker():
-    rand_seconds = random.randint(0, 10)
+    rand_seconds = random.randint(0, 3)
     await asyncio.sleep(rand_seconds)
     print("Background worker started", file=sys.stderr)
     while True:
@@ -354,10 +370,10 @@ async def background_worker():
             await process_pdf_from_s3(request_id)
         else:
             # print("No request found", file=sys.stderr)
-            await asyncio.sleep(5)
+            await asyncio.sleep(2)
 
 
-def initialize_background_workers(num_workers: int = 1):
+def initialize_background_workers(num_workers: int = 3):
     for _ in range(num_workers):
         asyncio.create_task(background_worker())
 
