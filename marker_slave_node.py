@@ -40,7 +40,7 @@ os.makedirs(UPLOAD_DIRECTORY, exist_ok=True)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app_data["models"] = create_model_dict()
-    initialize_background_workers(1)
+    initialize_background_workers()
 
     yield
 
@@ -193,6 +193,7 @@ S3_ACCESS_KEY = os.getenv("S3_ACCESS_KEY")
 S3_SECRET_KEY = os.getenv("S3_SECRET_KEY")
 S3_REGION = os.getenv("S3_REGION")
 S3_ENDPOINT = os.getenv("S3_ENDPOINT")
+PROCESSES_PER_CONTAINER = int(os.getenv("PROCESSES_PER_CONTAINER", "1"))
 
 s3_client = boto3.client(
     "s3",
@@ -373,7 +374,9 @@ async def background_worker():
             await asyncio.sleep(2)
 
 
-def initialize_background_workers(num_workers: int = 3):
+def initialize_background_workers(num_workers: Optional[int] = None):
+    if num_workers is None:
+        num_workers = PROCESSES_PER_CONTAINER
     for _ in range(num_workers):
         asyncio.create_task(background_worker())
 
