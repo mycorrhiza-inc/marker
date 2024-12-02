@@ -339,20 +339,22 @@ async def process_pdf_from_s3(request_id: int) -> None:
         status.status = "error"
         status.success = str(False)
         status.error = "Error in processing pdf: " + str(e)
-        set_status_in_redis(
-            request_id,
-            status,
-        )
     else:
-        status.markdown = results["output"]
-        status.images = json.dumps(results["images"])
-        status.status = "complete"
-        status.success = str(True)
+        if results.get("success") is not True:  # Also catches the none case
+            status.success = str(False)
+            status.error = str(results.get("error"))
+            print("Encountered error while processing pdf")
+            print(results.get("error"))
+        else:
+            status.markdown = results["output"]
+            status.images = json.dumps(results["images"])
+            status.status = "complete"
+            status.success = str(True)
+    finally:
         set_status_in_redis(
             request_id,
             status,
         )
-    finally:
         os.remove(pdf_filename)
 
 
