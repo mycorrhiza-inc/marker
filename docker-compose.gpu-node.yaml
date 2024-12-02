@@ -5,7 +5,7 @@ services:
     memswap_limit: ${MEM_LIMIT:-30gb}
     deploy:
       mode: replicated
-      replicas: ${REPLICAS:-1}
+      replicas: $1
       resources:
         limits:
           memory: ${MEM_LIMIT:-30gb}
@@ -16,5 +16,5 @@ services:
               capabilities: [gpu]
     env_file:
       - ./.env
-    command: "python3 new_server.py"
+    command: "python3 marker_slave_node.py"
     restart: always
