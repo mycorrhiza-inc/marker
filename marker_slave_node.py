@@ -228,6 +228,10 @@ async def process_pdf_from_s3(request_id: int) -> None:
 
     # Get PDF URL from Redis
     status = get_status_from_redis(request_id)
+    # Put this here so that if it ever pushes a result to redis, and isnt explicitly successful
+    # it will be marked as an error
+    status.status = "error"
+    status.success = str(False)
     s3_url = str(redis_client.hget(REDIS_S3_URLS_KEY, str(request_id)))
     if s3_url is None:
         status.status = "error"
