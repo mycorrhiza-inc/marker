@@ -318,7 +318,10 @@ def initialize_background_workers(num_workers: Optional[int] = None):
     if num_workers is None:
         num_workers = TASKS_PER_CONTAINER
     for _ in range(num_workers):
-        asyncio.create_task(background_worker())
+        thread = os.fork()
+        if thread == 0:  # Child process
+            asyncio.run(background_worker())
+            sys.exit(0)
 
 
 def main():
@@ -327,6 +330,7 @@ def main():
     try:
         asyncio.get_event_loop().run_forever()
     except KeyboardInterrupt:
+        print("Encountered keyboard interrupt")
         if "models" in app_data:
             del app_data["models"]
         sys.exit(0)
