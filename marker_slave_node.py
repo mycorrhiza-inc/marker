@@ -330,9 +330,14 @@ def run_background_workers(num_workers: Optional[int] = None):
     if num_workers is None:
         num_workers = TASKS_PER_CONTAINER
     # RUN AWAY: Give up on multithreading for now, and just do async
-    for _ in range(num_workers - 1):
-        asyncio.create_task(background_worker())
-    asyncio.run(background_worker())
+    background_worker_promises = []
+    for _ in range(num_workers):
+        background_worker_promises.append(background_worker())
+
+    async def run_promises():
+        await asyncio.gather(*background_worker_promises)
+
+    asyncio.run(run_promises())
 
 
 async def run_forever():
