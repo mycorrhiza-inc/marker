@@ -3,21 +3,16 @@ import traceback
 import click
 import os
 
-import uvicorn
 from pydantic import BaseModel, Field
-from starlette.responses import HTMLResponse
 
 from marker.config.parser import ConfigParser
 from marker.output import text_from_rendered
 
 import base64
-from contextlib import asynccontextmanager
 from typing import Any, Optional, Annotated
 import io
 
-from fastapi import FastAPI, Form, File, UploadFile
 from marker.converters.pdf import PdfConverter
-from marker.models import create_model_dict
 
 import logging
 from pathlib import Path
@@ -38,32 +33,12 @@ UPLOAD_DIRECTORY = "./uploads"
 os.makedirs(UPLOAD_DIRECTORY, exist_ok=True)
 
 
-@asynccontextmanager
 async def lifespan(app: FastAPI):
     app_data["models"] = create_model_dict()
     initialize_background_workers()
-
     yield
-
     if "models" in app_data:
         del app_data["models"]
-
-
-app = FastAPI(lifespan=lifespan)
-
-
-@app.get("/")
-async def root():
-    return HTMLResponse(
-        """
-<h1>Marker API</h1>
-<ul>
-    <li><a href="/docs">API Documentation</a></li>
-    <li><a href="/marker">Run marker (post request only)</a></li>
-</ul>
-"""
-    )
-
 
 class CommonParams(BaseModel):
     filepath: Annotated[
@@ -143,40 +118,6 @@ async def _convert_pdf(params: CommonParams):
         "metadata": metadata,
         "success": True,
     }
-
-
-@app.post("/marker")
-async def convert_pdf(params: CommonParams):
-    return await _convert_pdf(params)
-
-
-@app.post("/marker/upload")
-async def convert_pdf_upload(
-    page_range: Optional[str] = Form(default=None),
-    languages: Optional[str] = Form(default=None),
-    force_ocr: Optional[bool] = Form(default=False),
-    paginate_output: Optional[bool] = Form(default=False),
-    output_format: Optional[str] = Form(default="markdown"),
-    file: UploadFile = File(
-        ..., description="The PDF file to convert.", media_type="application/pdf"
-    ),
-):
-    upload_path = os.path.join(UPLOAD_DIRECTORY, file.filename)
-    with open(upload_path, "wb") as upload_file:
-        file_contents = await file.read()
-        upload_file.write(file_contents)
-
-    params = CommonParams(
-        filepath=upload_path,
-        page_range=page_range,
-        languages=languages,
-        force_ocr=force_ocr,
-        paginate_output=paginate_output,
-        output_format=output_format,
-    )
-    results = await _convert_pdf(params)
-    os.remove(upload_path)
-    return results
 
 
 TMP_DIR = Path("/tmp")
@@ -384,18 +325,6 @@ def initialize_background_workers(num_workers: Optional[int] = None):
         num_workers = TASKS_PER_CONTAINER
     for _ in range(num_workers):
         asyncio.create_task(background_worker())
-
-
-@click.command()
-@click.option("--port", type=int, default=8000, help="Port to run the server on")
-@click.option("--host", type=str, default="127.0.0.1", help="Host to run the server on")
-def main(port: int, host: str):
-    # Run the server
-    uvicorn.run(
-        app,
-        host=host,
-        port=port,
-    )
 
 
 if __name__ == "__main__":
