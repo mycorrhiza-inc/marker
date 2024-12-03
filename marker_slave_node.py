@@ -3,6 +3,7 @@ import traceback
 import click
 import os
 
+from marker.models import create_model_dict
 from pydantic import BaseModel, Field
 
 from marker.config.parser import ConfigParser
@@ -32,13 +33,6 @@ app_data = {}
 UPLOAD_DIRECTORY = "./uploads"
 os.makedirs(UPLOAD_DIRECTORY, exist_ok=True)
 
-
-async def lifespan(app: FastAPI):
-    app_data["models"] = create_model_dict()
-    initialize_background_workers()
-    yield
-    if "models" in app_data:
-        del app_data["models"]
 
 class CommonParams(BaseModel):
     filepath: Annotated[
@@ -325,6 +319,17 @@ def initialize_background_workers(num_workers: Optional[int] = None):
         num_workers = TASKS_PER_CONTAINER
     for _ in range(num_workers):
         asyncio.create_task(background_worker())
+
+
+def main():
+    app_data["models"] = create_model_dict()
+    initialize_background_workers()
+    try:
+        asyncio.get_event_loop().run_forever()
+    except KeyboardInterrupt:
+        if "models" in app_data:
+            del app_data["models"]
+        sys.exit(0)
 
 
 if __name__ == "__main__":
