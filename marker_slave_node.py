@@ -320,15 +320,17 @@ async def background_worker():
 
 
 def run_background_workers(num_workers: Optional[int] = None):
-    # if num_workers is None:
-    #     num_workers = TASKS_PER_CONTAINER
-    # for _ in range(num_workers):
-    #     thread = os.fork()
-    #     if thread == 0:  # Child process
-    #         asyncio.run(background_worker())
-    #         sys.exit(0)
-    # RUN AWAY: Give up on multithreading for now
+    if num_workers is None:
+        num_workers = TASKS_PER_CONTAINER
+    # RUN AWAY: Give up on multithreading for now, and just do async
+    for _ in range(num_workers - 1):
+        asyncio.create_task(background_worker())
     asyncio.run(background_worker())
+
+
+async def run_forever():
+    while True:
+        await asyncio.sleep(3600)
 
 
 def main():
