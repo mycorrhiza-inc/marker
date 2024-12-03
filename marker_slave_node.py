@@ -314,21 +314,22 @@ async def background_worker():
             await asyncio.sleep(2)
 
 
-def initialize_background_workers(num_workers: Optional[int] = None):
-    if num_workers is None:
-        num_workers = TASKS_PER_CONTAINER
-    for _ in range(num_workers):
-        thread = os.fork()
-        if thread == 0:  # Child process
-            asyncio.run(background_worker())
-            sys.exit(0)
+def run_background_workers(num_workers: Optional[int] = None):
+    # if num_workers is None:
+    #     num_workers = TASKS_PER_CONTAINER
+    # for _ in range(num_workers):
+    #     thread = os.fork()
+    #     if thread == 0:  # Child process
+    #         asyncio.run(background_worker())
+    #         sys.exit(0)
+    # RUN AWAY: Give up on multithreading for now
+    asyncio.run(background_worker())
 
 
 def main():
     app_data["models"] = create_model_dict()
-    initialize_background_workers()
     try:
-        asyncio.get_event_loop().run_forever()
+        run_background_workers()
     except KeyboardInterrupt:
         print("Encountered keyboard interrupt")
         if "models" in app_data:
