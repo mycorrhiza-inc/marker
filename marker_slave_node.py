@@ -279,6 +279,7 @@ async def process_pdf_from_s3(request_id: int) -> None:
         if results.get("success") is not True:  # Also catches the none case
             status.success = str(False)
             status.error = str(results.get("error"))
+            status.status = "error"
             print("Encountered error while processing pdf")
             print(results.get("error"))
         else:
