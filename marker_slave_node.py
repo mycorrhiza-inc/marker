@@ -212,12 +212,19 @@ def parse_s3_uri_to_bucket_and_key(s3_uri: str) -> Tuple[str, str]:
     return (bucket_name, key)
 
 
-def download_file_from_s3_url(s3_url: str, local_path: Path) -> None:
+async def download_file_from_s3_url(s3_url: str, local_path: Path) -> None:
     s3_bucket, s3_key = parse_s3_uri_to_bucket_and_key(s3_url)
     # If you want to make this async use the async boto implementation
     # Doing it on a seperate thread as async might be causing some new
     # issues with unparsable pdfs
-    s3_client.download_file(s3_bucket, s3_key, str(local_path))
+    # TODO: That doesnt seem to be the issue, fixed the error handling to investigate later
+    # adding this back in so it can be implemented next marker reboot
+
+    def run():
+        s3_client.download_file(s3_bucket, s3_key, str(local_path))
+
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, run)
 
 
 async def process_pdf_from_s3(request_id: int) -> None:
@@ -246,7 +253,7 @@ async def process_pdf_from_s3(request_id: int) -> None:
     # Download PDF from S3
     pdf_filename = input_directory / f"{request_id}.pdf"
     try:
-        download_file_from_s3_url(s3_url, pdf_filename)
+        await download_file_from_s3_url(s3_url, pdf_filename)
     except Exception as e:
         logger.error(
             f"Encountered error while processing {request_id} in getting file from s3"
