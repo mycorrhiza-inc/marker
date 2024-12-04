@@ -322,8 +322,12 @@ async def background_worker():
             )
             await process_pdf_from_s3(request_id)
         else:
+            print(
+                "No pdf found from server, waiting 4 seconds and trying again",
+                file=sys.stderr,
+            )
             # print("No request found", file=sys.stderr)
-            await asyncio.sleep(2)
+            await asyncio.sleep(4)
 
 
 def run_background_workers(num_workers: Optional[int] = None):
