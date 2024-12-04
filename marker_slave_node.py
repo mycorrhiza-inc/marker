@@ -344,11 +344,6 @@ def run_background_workers(num_workers: Optional[int] = None):
     asyncio.run(run_promises())
 
 
-async def run_forever():
-    while True:
-        await asyncio.sleep(3600)
-
-
 def main():
     app_data["models"] = create_model_dict()
     try:
