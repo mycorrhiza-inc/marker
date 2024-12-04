@@ -51,6 +51,7 @@ services:
       - ./frpc.toml:/etc/frp/frpc.toml
   valkey:
     hostname: valkey
+    restart: always
     image: valkey/valkey:7.2.5
     expose:
       - 6379
