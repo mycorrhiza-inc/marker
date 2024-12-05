@@ -281,30 +281,42 @@ async def process_pdf_from_s3(request_id: int) -> None:
         paginate_output=True,
         output_format="markdown",
     )
-    try:
-        results = await _convert_pdf(params)
-    except Exception as e:
-        status.status = "error"
-        status.success = str(False)
-        status.error = "Error in processing pdf: " + str(e)
-    else:
-        if results.get("success") is not True:  # Also catches the none case
-            status.success = str(False)
-            status.error = str(results.get("error"))
+    for i in range(4):
+        try:
+            results = await _convert_pdf(params)
+            if results.get("success") is True:
+                if i != 0:
+                    print("WHOO THE RETRY ALGORITHM ACTUALLY WORKS\n")
+                    print("Successfully processed pdf after " + str(i + 1) + " tries\n")
+
+                status.markdown = results["output"]
+                status.images = json.dumps(results["images"])
+                status.status = "complete"
+                status.success = str(True)
+                break
+            else:
+                status.success = str(False)
+                status.error = str(results.get("error"))
+                status.status = "error"
+                print("Encountered error while processing pdf")
+                print(results.get("error"))
+                if "Data format error" not in str(results.get("error")):
+                    break
+                # If it is a data error its a known issue with async in pymupdf, it does seem to be intermittent though
+                # wait a sec and try again.
+                await asyncio.sleep(2 + random.randint(0, 4))
+                print("Trying again after waiting for data error.")
+        except Exception as e:
             status.status = "error"
-            print("Encountered error while processing pdf")
-            print(results.get("error"))
-        else:
-            status.markdown = results["output"]
-            status.images = json.dumps(results["images"])
-            status.status = "complete"
-            status.success = str(True)
-    finally:
-        set_status_in_redis(
-            request_id,
-            status,
-        )
-        os.remove(pdf_filename)
+            status.success = str(False)
+            status.error = "Error in processing pdf: " + str(e)
+            if "Data format error" not in str(e):
+                break
+    set_status_in_redis(
+        request_id,
+        status,
+    )
+    os.remove(pdf_filename)
 
 
 def pdf_to_md_path(pdf_path: Path) -> Path:
