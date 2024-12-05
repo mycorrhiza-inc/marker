@@ -170,6 +170,7 @@ def get_status_from_redis(request_id: int) -> RequestStatus:
 def set_status_in_redis(request_id: int, status: RequestStatus) -> None:
     status_dict = status.model_dump()
     redis_client.hmset(str(request_id), status_dict)
+    redis_client.expire(str(request_id), 60 * 60)
 
 
 def pop_from_queue() -> Optional[int]:

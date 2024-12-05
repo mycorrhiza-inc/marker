@@ -2,7 +2,7 @@
 import os
 import traceback
 import random
-from botocore import endpoint
+from botocore import endpoint, re
 import redis
 import boto3
 
@@ -113,6 +113,7 @@ def push_to_queue(request_id: int, priority: bool):
 
 def update_status_in_redis(request_id: int, status: Dict[str, str]) -> None:
     redis_client.hmset(str(request_id), status)
+    redis_client.expire(str(request_id), 60 * 60)
 
 
 def upload_file_to_s3(file, file_name, bucket: Optional[str] = None):
@@ -158,6 +159,7 @@ class PDFProcessor(Controller):
             },
         )
         redis_client.hset(REDIS_S3_URLS_KEY, str(request_id), s3_url)
+        # TODO: Figure out how to make this actually expire.
         push_to_queue(request_id, priority)
 
         return {
