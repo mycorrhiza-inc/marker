@@ -8,6 +8,7 @@ services:
     environment:
       - REDIS_HOST = valkey
     command: "python3 litestar_server.py"
+    restart: always
     labels:
       - "traefik.enable=true"
       # - "traefik.http.routers.http-server.rule=Host(`${DOMAIN:-marker.kessler.xyz}`) && PathPrefix(`/api`) || PathPrefix(`/schema`)"
@@ -20,6 +21,7 @@ services:
 
   reverse-proxy:
     image: traefik:v3.1.2
+    restart: always
     command:
       # - "--log.level=DEBUG"
       - "--api.insecure=true"
