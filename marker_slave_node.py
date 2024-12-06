@@ -281,13 +281,15 @@ async def process_pdf_from_s3(request_id: int) -> None:
         paginate_output=True,
         output_format="markdown",
     )
-    for i in range(4):
+    # Setting this to never retry for now, since it never seemed to get rid of any errors.
+    # It might actually just be a corruption bug in the fundamental pdfs.
+    for i in range(1):
         try:
             results = await _convert_pdf(params)
             if results.get("success") is True:
+                print("Successfully processed pdf after " + str(i + 1) + " tries\n")
                 if i != 0:
                     print("WHOO THE RETRY ALGORITHM ACTUALLY WORKS\n")
-                    print("Successfully processed pdf after " + str(i + 1) + " tries\n")
 
                 status.markdown = results["output"]
                 status.images = json.dumps(results["images"])
